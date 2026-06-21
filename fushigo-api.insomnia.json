@@ -1,0 +1,376 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_source": "insomnia.desktop",
+  "__export_date": "2026-06-21T00:00:00.000Z",
+  "resources": [
+    {
+      "_type": "workspace",
+      "_id": "wrk_fushigo",
+      "name": "FushiGO API",
+      "description": "API proxy para Cittamobi - Bus tracking em tempo real",
+      "scope": "collection",
+      "parentId": null
+    },
+    {
+      "_type": "environment",
+      "_id": "env_fushigo",
+      "name": "FushiGO Environment",
+      "data": {
+        "base_url": "http://localhost:47291",
+        "device_id": "gerar-uuid-aqui",
+        "access_token": "obter-via-register",
+        "sse_token": "obter-via-sse-token",
+        "service_id": "0ec23b44-d280-11f0-a0e6-02001705c31d",
+        "stop_id": "4e410a9e-04fa-4a7e-a4cc-5d4718c8fc61",
+        "route_id": "08a00dc8-d280-11f0-a0e6-02001705c31d",
+        "notification_id": ""
+      },
+      "parentId": "wrk_fushigo"
+    },
+    {
+      "_type": "request_group",
+      "_id": "fld_auth",
+      "name": "Auth",
+      "parentId": "wrk_fushigo"
+    },
+    {
+      "_type": "request_group",
+      "_id": "fld_search",
+      "name": "Search",
+      "parentId": "wrk_fushigo"
+    },
+    {
+      "_type": "request_group",
+      "_id": "fld_vehicles",
+      "name": "Vehicles",
+      "parentId": "wrk_fushigo"
+    },
+    {
+      "_type": "request_group",
+      "_id": "fld_predictions",
+      "name": "Predictions",
+      "parentId": "wrk_fushigo"
+    },
+    {
+      "_type": "request_group",
+      "_id": "fld_services",
+      "name": "Services",
+      "parentId": "wrk_fushigo"
+    },
+    {
+      "_type": "request_group",
+      "_id": "fld_stops",
+      "name": "Stops",
+      "parentId": "wrk_fushigo"
+    },
+    {
+      "_type": "request_group",
+      "_id": "fld_notifications",
+      "name": "Notifications",
+      "parentId": "wrk_fushigo"
+    },
+    {
+      "_type": "request_group",
+      "_id": "fld_sse",
+      "name": "SSE (Real-time)",
+      "parentId": "wrk_fushigo"
+    },
+    {
+      "_type": "request",
+      "_id": "req_register",
+      "name": "Register",
+      "method": "POST",
+      "url": "{{ base_url }}/api/auth/register",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"deviceId\": \"{{ device_id }}\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parentId": "fld_auth"
+    },
+    {
+      "_type": "request",
+      "_id": "req_refresh",
+      "name": "Refresh Token",
+      "method": "POST",
+      "url": "{{ base_url }}/api/auth/refresh",
+      "body": {
+        "mimeType": "application/json",
+        "text": ""
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_auth"
+    },
+    {
+      "_type": "request",
+      "_id": "req_logout",
+      "name": "Logout",
+      "method": "POST",
+      "url": "{{ base_url }}/api/auth/logout",
+      "body": {
+        "mimeType": "application/json",
+        "text": ""
+      },
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_auth"
+    },
+    {
+      "_type": "request",
+      "_id": "req_sse_token",
+      "name": "Get SSE Token",
+      "method": "POST",
+      "url": "{{ base_url }}/api/sse/token",
+      "body": {
+        "mimeType": "application/json",
+        "text": ""
+      },
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_auth"
+    },
+    {
+      "_type": "request",
+      "_id": "req_session",
+      "name": "Detectar Cidade",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/session",
+      "parameters": [
+        { "name": "lat", "value": "-30.032" },
+        { "name": "lng", "value": "-51.228" }
+      ],
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_search"
+    },
+    {
+      "_type": "request",
+      "_id": "req_search",
+      "name": "Buscar Rotas",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/search",
+      "parameters": [
+        { "name": "q", "value": "terminal" },
+        { "name": "a", "value": "4926" },
+        { "name": "lat", "value": "-30.032" },
+        { "name": "lng", "value": "-51.228" }
+      ],
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_search"
+    },
+    {
+      "_type": "request",
+      "_id": "req_viewport_recommendation",
+      "name": "Viewport Recommendation (Zoom)",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/viewport/recommendation",
+      "parameters": [
+        { "name": "lat", "value": "-30.057" },
+        { "name": "lng", "value": "-51.192" }
+      ],
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_search"
+    },
+    {
+      "_type": "request",
+      "_id": "req_vehicles",
+      "name": "Get Vehicles (REST)",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/vehicles/service/{{ service_id }}",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_vehicles"
+    },
+    {
+      "_type": "request",
+      "_id": "req_prediction_stop",
+      "name": "Prediction por Parada",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/predictions/stop/{{ stop_id }}",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_predictions"
+    },
+    {
+      "_type": "request",
+      "_id": "req_prediction_service",
+      "name": "Prediction por Servico + Parada",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/predictions/{{ service_id }}/{{ stop_id }}",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_predictions"
+    },
+    {
+      "_type": "request",
+      "_id": "req_prediction_departure",
+      "name": "Prediction Departure por Data",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/predictions/departure",
+      "parameters": [
+        { "name": "serviceId", "value": "{{ service_id }}" },
+        { "name": "date", "value": "2026-06-21" },
+        { "name": "time", "value": "08:00" }
+      ],
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_predictions"
+    },
+    {
+      "_type": "request",
+      "_id": "req_service_details",
+      "name": "Detalhes do Servico",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/services/{{ service_id }}",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_services"
+    },
+    {
+      "_type": "request",
+      "_id": "req_route_services",
+      "name": "Servicos de uma Rota",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/routes/{{ route_id }}/services",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_services"
+    },
+    {
+      "_type": "request",
+      "_id": "req_stops_viewport",
+      "name": "Paradas no Viewport",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/stops/viewport",
+      "parameters": [
+        { "name": "nelat", "value": "-30.03" },
+        { "name": "nelng", "value": "-51.22" },
+        { "name": "swlat", "value": "-30.04" },
+        { "name": "swlng", "value": "-51.23" }
+      ],
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_stops"
+    },
+    {
+      "_type": "request",
+      "_id": "req_stops_service",
+      "name": "Paradas do Servico",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/stops/service/{{ service_id }}",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_stops"
+    },
+    {
+      "_type": "request",
+      "_id": "req_subscribe_notification",
+      "name": "Criar Notificacao",
+      "method": "POST",
+      "url": "{{ base_url }}/v1/notifications/subscribe",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"subscription\": {\n    \"endpoint\": \"https://fcm.googleapis.com/fcm/send/...\",\n    \"keys\": {\n      \"p256dh\": \"...\",\n      \"auth\": \"...\"\n    }\n  },\n  \"stopId\": \"{{ stop_id }}\",\n  \"serviceId\": \"{{ service_id }}\",\n  \"notifyOnApproach\": true,\n  \"notifyScheduled\": false\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_notifications"
+    },
+    {
+      "_type": "request",
+      "_id": "req_unsubscribe_notification",
+      "name": "Remover Notificacao",
+      "method": "DELETE",
+      "url": "{{ base_url }}/v1/notifications/{{ notification_id }}",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_notifications"
+    },
+    {
+      "_type": "request",
+      "_id": "req_notifications_by_stop",
+      "name": "Notificacoes da Parada",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/notifications/stop/{{ stop_id }}",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_notifications"
+    },
+    {
+      "_type": "request",
+      "_id": "req_vapid_key",
+      "name": "Chave Publica VAPID",
+      "method": "GET",
+      "url": "{{ base_url }}/v1/vapid-public-key",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" },
+        { "name": "Authorization", "value": "Bearer {{ access_token }}" }
+      ],
+      "parentId": "fld_notifications"
+    },
+    {
+      "_type": "request",
+      "_id": "req_sse_vehicles",
+      "name": "Live Vehicles (SSE)",
+      "method": "GET",
+      "url": "{{ base_url }}/live/vehicles/{{ service_id }}?sseToken={{ sse_token }}",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" }
+      ],
+      "parentId": "fld_sse"
+    },
+    {
+      "_type": "request",
+      "_id": "req_sse_predictions",
+      "name": "Live Predictions (SSE)",
+      "method": "GET",
+      "url": "{{ base_url }}/live/predictions/{{ stop_id }}?sseToken={{ sse_token }}",
+      "headers": [
+        { "name": "X-Device-Id", "value": "{{ device_id }}" }
+      ],
+      "parentId": "fld_sse"
+    }
+  ]
+}

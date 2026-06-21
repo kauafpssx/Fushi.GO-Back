@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.git
+*.md
+*.json
+!package.json
+!bun.lock

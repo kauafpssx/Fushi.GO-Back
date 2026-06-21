@@ -1,0 +1,331 @@
+{
+  "info": {
+    "name": "FushiGO API",
+    "description": "API proxy para Cittamobi - Bus tracking em tempo real",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:47291" },
+    { "key": "device_id", "value": "gerar-uuid-aqui" },
+    { "key": "access_token", "value": "obter-via-register" },
+    { "key": "sse_token", "value": "obter-via-sse-token" },
+    { "key": "service_id", "value": "0ec23b44-d280-11f0-a0e6-02001705c31d" },
+    { "key": "stop_id", "value": "4e410a9e-04fa-4a7e-a4cc-5d4718c8fc61" },
+    { "key": "route_id", "value": "08a00dc8-d280-11f0-a0e6-02001705c31d" },
+    { "key": "notification_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "url": "{{ base_url }}/api/auth/register",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{ device_id }}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "url": "{{ base_url }}/api/auth/refresh",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{ base_url }}/api/auth/logout",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Get SSE Token",
+          "request": {
+            "method": "POST",
+            "url": "{{ base_url }}/api/sse/token",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Detectar Cidade",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ base_url }}/v1/session?lat=-30.032&lng=-51.228",
+              "query": [
+                { "key": "lat", "value": "-30.032" },
+                { "key": "lng", "value": "-51.228" }
+              ]
+            },
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Buscar Rotas",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ base_url }}/v1/search?q=terminal&a=4926&lat=-30.032&lng=-51.228",
+              "query": [
+                { "key": "q", "value": "terminal" },
+                { "key": "a", "value": "4926" },
+                { "key": "lat", "value": "-30.032" },
+                { "key": "lng", "value": "-51.228" }
+              ]
+            },
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Viewport Recommendation (Zoom)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ base_url }}/v1/viewport/recommendation?lat=-30.057&lng=-51.192",
+              "query": [
+                { "key": "lat", "value": "-30.057" },
+                { "key": "lng", "value": "-51.192" }
+              ]
+            },
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vehicles",
+      "item": [
+        {
+          "name": "Get Vehicles (REST)",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/v1/vehicles/service/{{ service_id }}",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Predictions",
+      "item": [
+        {
+          "name": "Prediction por Parada",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/v1/predictions/stop/{{ stop_id }}",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Prediction por Servico + Parada",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/v1/predictions/{{ service_id }}/{{ stop_id }}",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Prediction Departure por Data",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ base_url }}/v1/predictions/departure?serviceId={{ service_id }}&date=2026-06-21&time=08:00",
+              "query": [
+                { "key": "serviceId", "value": "{{ service_id }}" },
+                { "key": "date", "value": "2026-06-21" },
+                { "key": "time", "value": "08:00" }
+              ]
+            },
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Services",
+      "item": [
+        {
+          "name": "Detalhes do Servico",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/v1/services/{{ service_id }}",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Servicos de uma Rota",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/v1/routes/{{ route_id }}/services",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stops",
+      "item": [
+        {
+          "name": "Paradas no Viewport",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ base_url }}/v1/stops/viewport?nelat=-30.03&nelng=-51.22&swlat=-30.04&swlng=-51.23",
+              "query": [
+                { "key": "nelat", "value": "-30.03" },
+                { "key": "nelng", "value": "-51.22" },
+                { "key": "swlat", "value": "-30.04" },
+                { "key": "swlng", "value": "-51.23" }
+              ]
+            },
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Paradas do Servico",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/v1/stops/service/{{ service_id }}",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Criar Notificacao",
+          "request": {
+            "method": "POST",
+            "url": "{{ base_url }}/v1/notifications/subscribe",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subscription\": {\n    \"endpoint\": \"https://fcm.googleapis.com/fcm/send/...\",\n    \"keys\": {\n      \"p256dh\": \"...\",\n      \"auth\": \"...\"\n    }\n  },\n  \"stopId\": \"{{ stop_id }}\",\n  \"serviceId\": \"{{ service_id }}\",\n  \"notifyOnApproach\": true,\n  \"notifyScheduled\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Remover Notificacao",
+          "request": {
+            "method": "DELETE",
+            "url": "{{ base_url }}/v1/notifications/{{ notification_id }}",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Notificacoes da Parada",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/v1/notifications/stop/{{ stop_id }}",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        },
+        {
+          "name": "Chave Publica VAPID",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/v1/vapid-public-key",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" },
+              { "key": "Authorization", "value": "Bearer {{ access_token }}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "SSE (Real-time)",
+      "item": [
+        {
+          "name": "Live Vehicles (SSE)",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/live/vehicles/{{ service_id }}?sseToken={{ sse_token }}",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" }
+            ]
+          }
+        },
+        {
+          "name": "Live Predictions (SSE)",
+          "request": {
+            "method": "GET",
+            "url": "{{ base_url }}/live/predictions/{{ stop_id }}?sseToken={{ sse_token }}",
+            "header": [
+              { "key": "X-Device-Id", "value": "{{ device_id }}" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
