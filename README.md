@@ -1,4 +1,4 @@
-# FushiGO
+# Fushi.GO
 
 Proxy inteligente para a API Cittamobi com SSE para tracking de ônibus em tempo real.
 
