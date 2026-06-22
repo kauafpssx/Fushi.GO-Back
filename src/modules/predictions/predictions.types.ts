@@ -10,3 +10,18 @@ export interface Arrival {
   arrivalTime: number;
   arrivalSeconds: number;
 }
+
+export interface DepartureTimestamp {
+  departureTimestamp: number;
+}
+
+export interface DayDepartures {
+  date: string;
+  dayOfWeek: string;
+  departures: DepartureTimestamp[];
+}
+
+export interface ServiceSchedule {
+  serviceId: string;
+  schedule: DayDepartures[];
+}

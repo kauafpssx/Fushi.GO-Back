@@ -6,21 +6,18 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
   const deviceId = request.headers['x-device-id'] as string;
 
   if (!authHeader?.startsWith('Bearer ')) {
-    reply.code(401).send({ error: 'Missing authorization header' });
-    return;
+    return reply.code(401).send({ error: 'Missing authorization header' });
   }
 
   if (!deviceId) {
-    reply.code(401).send({ error: 'Missing X-Device-Id header' });
-    return;
+    return reply.code(401).send({ error: 'Missing X-Device-Id header' });
   }
 
   const token = authHeader.slice(7);
   const session = validateSession(token, deviceId);
 
   if (!session) {
-    reply.code(401).send({ error: 'Invalid or expired session' });
-    return;
+    return reply.code(401).send({ error: 'Invalid or expired session' });
   }
 
   (request as any).sessionId = session.id;

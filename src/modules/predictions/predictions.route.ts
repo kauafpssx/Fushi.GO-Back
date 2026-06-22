@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getPredictions, getPredictionService, getPredictionDeparture } from './predictions.service';
+import { getPredictions, getPredictionService, getPredictionDeparture, getServiceSchedule } from './predictions.service';
 
 export async function predictionsRoutes(app: FastifyInstance) {
   app.get('/predictions/stop/:stopId', async (request, reply) => {
@@ -19,5 +19,13 @@ export async function predictionsRoutes(app: FastifyInstance) {
       time?: string;
     };
     return getPredictionDeparture(serviceId, date, time);
+  });
+
+  app.get('/predictions/departure/schedule', async (request, reply) => {
+    const { serviceId, days } = request.query as {
+      serviceId: string;
+      days?: string;
+    };
+    return getServiceSchedule(serviceId, days ? parseInt(days, 10) : 7);
   });
 }

@@ -11,7 +11,7 @@ export const env = {
   host: process.env.HOST || '0.0.0.0',
   corsOrigin: requireEnv('CORS_ORIGIN'),
   jwtSecret: requireEnv('JWT_SECRET'),
-  cittamobiUsername: requireEnv('CITTAMOB_USERNAME'),
+  cittamobiUsername: Buffer.from(requireEnv('CITTAMOB_USERNAME_B64'), 'base64').toString(),
   cittamobiCoreUrl: requireEnv('CITTAMOB_CORE_URL'),
   cittamobiSessionUrl: requireEnv('CITTAMOB_SESSION_URL'),
   upstashRedisUrl: requireEnv('UPSTASH_REDIS_REST_URL'),
