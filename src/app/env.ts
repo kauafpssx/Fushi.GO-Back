@@ -7,8 +7,8 @@ function requireEnv(name: string): string {
 }
 
 export const env = {
-  port: Number(process.env.PORT) || 47291,
-  host: '0.0.0.0',
+  port: Number(process.env.PORT) || 8300,
+  host: process.env.IP || '::',
   corsOrigin: requireEnv('CORS_ORIGIN'),
   jwtSecret: requireEnv('JWT_SECRET'),
   cittamobiUsername: Buffer.from(requireEnv('CITTAMOB_USERNAME_B64'), 'base64').toString(),
