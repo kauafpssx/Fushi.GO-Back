@@ -1,6 +1,6 @@
 import { request } from '../../infrastructure/cittamobi/client';
 import { endpoints } from '../../infrastructure/cittamobi/endpoints';
-import type { DepartureTimestamp, DayDepartures, ServiceSchedule } from './predictions.types';
+import type { DepartureTimestamp, DayDepartures, ServiceSchedule, StopPredictionsResponse } from './predictions.types';
 
 export interface Prediction {
   stopId: string;
@@ -15,14 +15,14 @@ export interface Arrival {
   arrivalSeconds: number;
 }
 
-export async function getPredictions(stopId: string): Promise<Prediction[]> {
-  return request<Prediction[]>({
+export async function getPredictions(stopId: string): Promise<StopPredictionsResponse> {
+  return request<StopPredictionsResponse>({
     path: endpoints.predictionStop(stopId),
   });
 }
 
-export async function getPredictionService(serviceId: string, stopId: string): Promise<Prediction[]> {
-  return request<Prediction[]>({
+export async function getPredictionService(serviceId: string, stopId: string): Promise<StopPredictionsResponse> {
+  return request<StopPredictionsResponse>({
     path: endpoints.predictionService(serviceId, stopId),
   });
 }
