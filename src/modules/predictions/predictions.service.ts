@@ -2,6 +2,8 @@ import { request } from '../../infrastructure/cittamobi/client';
 import { endpoints } from '../../infrastructure/cittamobi/endpoints';
 import type { DepartureTimestamp, DayDepartures, ServiceSchedule, StopPredictionsResponse } from './predictions.types';
 
+export type { StopPredictionsResponse };
+
 export interface Prediction {
   stopId: string;
   stopName: string;

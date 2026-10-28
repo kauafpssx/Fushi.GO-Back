@@ -1,5 +1,5 @@
 import type { FastifyReply } from 'fastify';
-import { getPredictions, type Prediction } from './predictions.service';
+import { getPredictions, type Prediction, type StopPredictionsResponse } from './predictions.service';
 import { validateSSEToken } from '../../security/sse-token';
 import { metrics } from '../../shared/metrics';
 
@@ -44,7 +44,17 @@ async function pollLoop(stopId: string): Promise<void> {
     try {
       const data = await getPredictions(stopId);
       metrics.cittamobiRequests++;
-      broadcast(stopId, data);
+      const predictions: Prediction[] = data.services.map((service) => ({
+        stopId: service.stopId,
+        stopName: service.serviceMnemonic,
+        arrivals: service.vehicles.map((vehicle) => ({
+          serviceId: service.serviceId,
+          serviceName: service.serviceMnemonic,
+          arrivalTime: vehicle.prediction,
+          arrivalSeconds: vehicle.prediction,
+        })),
+      }));
+      broadcast(stopId, predictions);
     } catch (err) {
       console.error(`[sse] poll error ${stopId}:`, err);
     }

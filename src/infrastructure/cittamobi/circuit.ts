@@ -1,4 +1,4 @@
-import { env } from '../app/env';
+import { env } from '../../app/env';
 
 interface CircuitState {
   failures: number;
