@@ -31,8 +31,8 @@ export async function buildServer() {
   await app.register(cors, {
     origin: env.corsOrigin,
     credentials: true,
-    allowedHeaders: ['Accept', 'X-Device-Id', 'Origin', 'X-Requested-With', 'Accept-Encoding', 'Accept-Language', 'Host', 'Referer', 'User-Agent', 'Version'],
-    methods: ['GET', 'OPTIONS'],
+    allowedHeaders: ['content-type', 'X-Device-Id', 'authorization'],
+    methods: ['GET', 'POST', 'OPTIONS'],
   });
   await app.register(compress, { threshold: 1024, removeContentLengthHeader: true });
   await app.register(cookie);
