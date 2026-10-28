@@ -28,7 +28,12 @@ export async function buildServer() {
     genReqId: () => randomUUID().slice(0, 8),
   });
 
-  await app.register(cors, { origin: env.corsOrigin, credentials: true });
+  await app.register(cors, {
+    origin: env.corsOrigin,
+    credentials: true,
+    allowedHeaders: ['Accept', 'X-Device-Id', 'Origin', 'X-Requested-With', 'Accept-Encoding', 'Accept-Language', 'Host', 'Referer', 'User-Agent', 'Version'],
+    methods: ['GET', 'OPTIONS'],
+  });
   await app.register(compress, { threshold: 1024, removeContentLengthHeader: true });
   await app.register(cookie);
 
