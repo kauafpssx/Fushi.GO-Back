@@ -14,7 +14,9 @@ export async function predictionsSSERoutes(app: FastifyInstance) {
       return;
     }
 
-    const corsOrigin = Array.isArray(env.corsOrigin) ? env.corsOrigin[0] : env.corsOrigin;
+    const allowedOrigins = Array.isArray(env.corsOrigin) ? env.corsOrigin : [env.corsOrigin];
+    const requestOrigin = request.headers.origin as string | undefined;
+    const acao = requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : '';
 
     reply.hijack();
     const socket = reply.raw;
@@ -22,7 +24,7 @@ export async function predictionsSSERoutes(app: FastifyInstance) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': corsOrigin,
+      'Access-Control-Allow-Origin': acao,
       'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Allow-Headers': 'Accept, X-Device-Id',
       'X-Content-Type-Options': 'nosniff',
