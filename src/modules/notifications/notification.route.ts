@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { subscribe, unsubscribe, getByStopId, getByDeviceId } from './notification.service';
+import { env } from '../../app/env';
+import { subscribe, unsubscribe, getByStopId, getDeviceSubscriptions } from './notification.service';
 import { validate } from '../../middleware/validate.middleware';
 
 const subscriptionSchema = z.object({
@@ -19,7 +20,19 @@ const subscribeBodySchema = z.object({
   notifyScheduled: z.boolean().optional(),
 });
 
+const stopIdParamsSchema = z.object({
+  stopId: z.string().uuid(),
+});
+
+const subIdParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
 export async function notificationsRoutes(app: FastifyInstance) {
+  app.get('/vapid-public-key', async () => {
+    return { publicKey: env.vapidPublicKey };
+  });
+
   app.post(
     '/notifications/subscribe',
     { preHandler: validate(subscribeBodySchema) },
@@ -28,41 +41,34 @@ export async function notificationsRoutes(app: FastifyInstance) {
       const deviceId = (request as any).deviceId as string;
 
       const result = await subscribe({
-        ...body,
+        endpoint: body.subscription.endpoint,
+        p256dh: body.subscription.keys.p256dh,
+        auth: body.subscription.keys.auth,
+        stopId: body.stopId,
+        serviceId: body.serviceId,
         deviceId,
+        notifyOnApproach: body.notifyOnApproach,
+        notifyScheduled: body.notifyScheduled,
       });
       return result;
     }
   );
 
   app.delete('/notifications/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const { id } = subIdParamsSchema.parse(request.params);
     const deviceId = (request as any).deviceId as string;
-    await unsubscribe(id, deviceId);
-    return { ok: true };
-  });
 
-  app.get('/notifications/stop/:stopId', async (request, reply) => {
-    const { stopId } = request.params as { stopId: string };
-    const prefs = await getByStopId(stopId);
-    return prefs.map((p) => ({
-      id: p.id,
-      stopId: p.stopId,
-      serviceId: p.serviceId,
-      deviceId: p.deviceId,
-      notifyOnApproach: p.notifyOnApproach,
-      notifyScheduled: p.notifyScheduled,
-      createdAt: p.createdAt,
-    }));
+    const result = await unsubscribe(id, deviceId);
+    return result;
   });
 
   app.get('/notifications', async (request, reply) => {
     const deviceId = (request as any).deviceId as string;
-    const prefs = await getByDeviceId(deviceId);
-    return prefs.map((p) => ({
+    const subs = await getDeviceSubscriptions(deviceId);
+    return subs.map((p) => ({
       id: p.id,
       stopId: p.stopId,
-      serviceId: p.serviceId,
+      serviceId: p.serviceId || undefined,
       deviceId: p.deviceId,
       notifyOnApproach: p.notifyOnApproach,
       notifyScheduled: p.notifyScheduled,
@@ -70,7 +76,19 @@ export async function notificationsRoutes(app: FastifyInstance) {
     }));
   });
 
-  app.get('/vapid-public-key', async () => {
-    return { publicKey: process.env.VAPID_PUBLIC_KEY };
+  app.get('/notifications/stop/:stopId', async (request, reply) => {
+    const { stopId } = stopIdParamsSchema.parse(request.params);
+    const { serviceId } = request.query as { serviceId?: string };
+    const subs = await getByStopId(stopId, serviceId);
+    return subs.map((p) => ({
+      id: p.id,
+      stopId: p.stopId,
+      serviceId: p.serviceId || undefined,
+      deviceId: p.deviceId,
+      notifyOnApproach: p.notifyOnApproach,
+      notifyScheduled: p.notifyScheduled,
+      createdAt: p.createdAt,
+      lastNotified: p.lastNotified,
+    }));
   });
 }

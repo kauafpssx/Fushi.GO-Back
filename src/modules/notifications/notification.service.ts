@@ -4,9 +4,10 @@ import {
   savePreference,
   deletePreference,
   getPreference,
-  getByStopId,
   getByDeviceId,
-  type NotificationSubscription,
+  getByStopId,
+  updateLastNotified,
+  removeSubscription,
   type NotificationPreference,
 } from './notification.store';
 import { randomUUID } from 'crypto';
@@ -18,8 +19,12 @@ webPush.setVapidDetails(
   env.vapidPrivateKey
 );
 
+const ANTI_SPAM_MS = 10 * 60 * 1000; // 10 minutos
+
 export async function subscribe(params: {
-  subscription: NotificationSubscription;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
   stopId: string;
   serviceId?: string;
   deviceId: string;
@@ -27,74 +32,85 @@ export async function subscribe(params: {
   notifyScheduled?: boolean;
 }): Promise<{ id: string }> {
   const id = randomUUID();
+  const now = Date.now();
 
   await savePreference({
     id,
-    subscription: params.subscription,
+    endpoint: params.endpoint,
+    p256dh: params.p256dh,
+    auth: params.auth,
     stopId: params.stopId,
-    serviceId: params.serviceId ?? null,
+    serviceId: params.serviceId ?? '',
     deviceId: params.deviceId,
     notifyOnApproach: params.notifyOnApproach ?? true,
     notifyScheduled: params.notifyScheduled ?? false,
-    createdAt: Date.now(),
+    createdAt: now,
+    lastNotified: 0,
   });
 
   return { id };
 }
 
-export async function unsubscribe(id: string, deviceId: string): Promise<void> {
-  const pref = await getPreference(id);
-  if (!pref) return;
-  if (pref.deviceId !== deviceId) {
+export async function unsubscribe(id: string, deviceId: string): Promise<{ ok: boolean }> {
+  const result = await deletePreference(id, deviceId);
+  if (result.unauthorized) {
     throw new UnauthorizedError('Not allowed to delete this subscription');
   }
-  await deletePreference(id);
+  return { ok: true };
 }
 
-export async function sendNotification(
-  subscription: NotificationSubscription,
-  payload: { title: string; body: string; url?: string }
+export async function sendPushNotification(
+  endpoint: string,
+  p256dh: string,
+  auth: string,
+  payload: { title: string; body: string; icon?: string; badge?: string; tag?: string; renotify?: boolean; data?: Record<string, unknown> }
 ): Promise<boolean> {
   try {
     await webPush.sendNotification(
-      subscription,
+      { endpoint, keys: { p256dh, auth } },
       JSON.stringify(payload)
     );
     return true;
   } catch (err: any) {
-    if (err.statusCode === 410) {
+    if (err.statusCode === 410 || err.statusCode === 404) {
       return false;
     }
     throw err;
   }
 }
 
-export async function notifyStopApproach(
+export async function notifyStopArrival(
   stopId: string,
-  serviceName: string,
-  arrivalSeconds: number
+  serviceId: string,
+  payload: { title: string; body: string; icon?: string; badge?: string; tag?: string; renotify?: boolean; data?: Record<string, unknown> }
 ): Promise<void> {
-  const prefs = await getByStopId(stopId);
-  const minutes = Math.ceil(arrivalSeconds / 60);
-
-  const payload = {
-    title: `${serviceName} chegando!`,
-    body: `Faltam ${minutes} minuto${minutes > 1 ? 's' : ''}`,
-    url: `/stop/${stopId}`,
-  };
+  const prefs = await getByStopId(stopId, serviceId);
+  const now = Date.now();
 
   for (const pref of prefs) {
-    if (!pref.notifyOnApproach) continue;
+    // Anti-spam: não notificar se já notificou nos últimos 10 min
+    if (now - pref.lastNotified < ANTI_SPAM_MS) continue;
 
-    const sent = await sendNotification(pref.subscription, payload);
+    const sent = await sendPushNotification(
+      pref.endpoint,
+      pref.p256dh,
+      pref.auth,
+      payload
+    );
+
     if (!sent) {
-      await deletePreference(pref.id);
+      // Inscrição inválida (410 Gone / 404), remove completamente
+      await removeSubscription(pref.id);
+      continue;
     }
+
+    // Atualiza último envio
+    await updateLastNotified(pref.id, now);
   }
 }
 
-export {
-  getByStopId,
-  getByDeviceId,
-  type NotificationPreference,
-};
+export async function getDeviceSubscriptions(deviceId: string): Promise<NotificationPreference[]> {
+  return getByDeviceId(deviceId);
+}
+
+export { getByStopId, type NotificationPreference };

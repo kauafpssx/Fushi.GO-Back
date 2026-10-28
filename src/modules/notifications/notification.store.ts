@@ -16,66 +16,127 @@ export interface NotificationSubscription {
 
 export interface NotificationPreference {
   id: string;
-  subscription: NotificationSubscription;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
   stopId: string;
-  serviceId: string | null;
+  serviceId: string;
   deviceId: string;
   notifyOnApproach: boolean;
   notifyScheduled: boolean;
   createdAt: number;
+  lastNotified: number;
 }
 
-const PREFIX = 'notif:';
-const TTL_SECONDS = 30 * 24 * 60 * 60; // 30 dias
+const PREFIX_SUB = 'notif:sub:';
+const PREFIX_STOP = 'notif:stop:';
+const PREFIX_DEVICE = 'notif:device:';
+const TTL_SECONDS = 2592000; // 30 dias em segundos
 
 export async function savePreference(pref: NotificationPreference): Promise<void> {
-  await redis.set(`${PREFIX}${pref.id}`, JSON.stringify(pref), { ex: TTL_SECONDS });
-  await redis.sadd(`${PREFIX}stop:${pref.stopId}`, pref.id);
-  await redis.expire(`${PREFIX}stop:${pref.stopId}`, TTL_SECONDS);
-  await redis.sadd(`${PREFIX}device:${pref.deviceId}`, pref.id);
-  await redis.expire(`${PREFIX}device:${pref.deviceId}`, TTL_SECONDS);
-  if (pref.serviceId) {
-    await redis.sadd(`${PREFIX}service:${pref.serviceId}`, pref.id);
-    await redis.expire(`${PREFIX}service:${pref.serviceId}`, TTL_SECONDS);
-  }
-}
+  const hashKey = `${PREFIX_SUB}${pref.id}`;
+  const stopKey = `${PREFIX_STOP}${pref.stopId}:${pref.serviceId}`;
+  const deviceKey = `${PREFIX_DEVICE}${pref.deviceId}`;
 
-export async function getByDeviceId(deviceId: string): Promise<NotificationPreference[]> {
-  const ids = await redis.smembers(`${PREFIX}device:${deviceId}`);
-  if (!ids || ids.length === 0) return [];
-  const prefs = await Promise.all(ids.map((id) => getPreference(id as string)));
-  return prefs.filter(Boolean) as NotificationPreference[];
+  await redis.hset(hashKey, {
+    id: pref.id,
+    endpoint: pref.endpoint,
+    p256dh: pref.p256dh,
+    auth: pref.auth,
+    stopId: pref.stopId,
+    serviceId: pref.serviceId,
+    deviceId: pref.deviceId,
+    notifyOnApproach: String(pref.notifyOnApproach),
+    notifyScheduled: String(pref.notifyScheduled),
+    createdAt: String(pref.createdAt),
+    lastNotified: String(pref.lastNotified),
+  });
+
+  await redis.sadd(stopKey, pref.id);
+  await redis.sadd(deviceKey, pref.id);
+
+  await redis.expire(hashKey, TTL_SECONDS);
+  await redis.expire(stopKey, TTL_SECONDS);
+  await redis.expire(deviceKey, TTL_SECONDS);
 }
 
 export async function getPreference(id: string): Promise<NotificationPreference | null> {
-  const data = await redis.get(`${PREFIX}${id}`);
-  if (!data) return null;
-  if (typeof data === 'string') return JSON.parse(data);
-  return data as unknown as NotificationPreference;
+  const hashKey = `${PREFIX_SUB}${id}`;
+  const sub = (await redis.hgetall(hashKey)) as Record<string, string>;
+  if (!sub || Object.keys(sub).length === 0) return null;
+
+  return {
+    id: sub.id,
+    endpoint: sub.endpoint,
+    p256dh: sub.p256dh,
+    auth: sub.auth,
+    stopId: sub.stopId,
+    serviceId: sub.serviceId,
+    deviceId: sub.deviceId,
+    notifyOnApproach: sub.notifyOnApproach === 'true',
+    notifyScheduled: sub.notifyScheduled === 'true',
+    createdAt: Number(sub.createdAt),
+    lastNotified: Number(sub.lastNotified),
+  };
 }
 
-export async function deletePreference(id: string): Promise<void> {
+export async function deletePreference(id: string, deviceId: string): Promise<{ ok: boolean; unauthorized?: boolean }> {
+  const pref = await getPreference(id);
+  if (!pref) {
+    return { ok: true }; // idempotente
+  }
+
+  if (pref.deviceId !== deviceId) {
+    return { ok: false, unauthorized: true };
+  }
+
+  const stopKey = `${PREFIX_STOP}${pref.stopId}:${pref.serviceId}`;
+  const deviceKey = `${PREFIX_DEVICE}${pref.deviceId}`;
+  const hashKey = `${PREFIX_SUB}${id}`;
+
+  await redis.srem(stopKey, id);
+  await redis.srem(deviceKey, id);
+  await redis.del(hashKey);
+
+  return { ok: true };
+}
+
+export async function getByDeviceId(deviceId: string): Promise<NotificationPreference[]> {
+  const deviceKey = `${PREFIX_DEVICE}${deviceId}`;
+  const ids = await redis.smembers(deviceKey);
+  if (!ids || ids.length === 0) return [];
+
+  const subs = await Promise.all(ids.map((id) => getPreference(id)));
+  return subs.filter(Boolean) as NotificationPreference[];
+}
+
+export async function getByStopId(
+  stopId: string,
+  serviceId?: string
+): Promise<NotificationPreference[]> {
+  const stopKey = `${PREFIX_STOP}${stopId}:${serviceId ?? 'null'}`;
+  const ids = await redis.smembers(stopKey);
+  if (!ids || ids.length === 0) return [];
+
+  const subs = await Promise.all(ids.map((id) => getPreference(id)));
+  return subs.filter(Boolean) as NotificationPreference[];
+}
+
+export async function updateLastNotified(id: string, timestamp: number): Promise<void> {
+  const hashKey = `${PREFIX_SUB}${id}`;
+  await redis.hset(hashKey, { lastNotified: String(timestamp) });
+  await redis.expire(hashKey, TTL_SECONDS);
+}
+
+export async function removeSubscription(id: string): Promise<void> {
   const pref = await getPreference(id);
   if (!pref) return;
 
-  await redis.del(`${PREFIX}${id}`);
-  await redis.srem(`${PREFIX}stop:${pref.stopId}`, id);
-  await redis.srem(`${PREFIX}device:${pref.deviceId}`, id);
-  if (pref.serviceId) {
-    await redis.srem(`${PREFIX}service:${pref.serviceId}`, id);
-  }
-}
+  const stopKey = `${PREFIX_STOP}${pref.stopId}:${pref.serviceId}`;
+  const deviceKey = `${PREFIX_DEVICE}${pref.deviceId}`;
+  const hashKey = `${PREFIX_SUB}${id}`;
 
-export async function getByStopId(stopId: string): Promise<NotificationPreference[]> {
-  const ids = await redis.smembers(`${PREFIX}stop:${stopId}`);
-  if (!ids || ids.length === 0) return [];
-  const prefs = await Promise.all(ids.map((id) => getPreference(id as string)));
-  return prefs.filter(Boolean) as NotificationPreference[];
-}
-
-export async function getByServiceId(serviceId: string): Promise<NotificationPreference[]> {
-  const ids = await redis.smembers(`${PREFIX}service:${serviceId}`);
-  if (!ids || ids.length === 0) return [];
-  const prefs = await Promise.all(ids.map((id) => getPreference(id as string)));
-  return prefs.filter(Boolean) as NotificationPreference[];
+  await redis.srem(stopKey, id);
+  await redis.srem(deviceKey, id);
+  await redis.del(hashKey);
 }
