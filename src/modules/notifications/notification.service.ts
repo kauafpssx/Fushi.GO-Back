@@ -3,11 +3,14 @@ import { env } from '../../app/env';
 import {
   savePreference,
   deletePreference,
+  getPreference,
   getByStopId,
+  getByDeviceId,
   type NotificationSubscription,
   type NotificationPreference,
 } from './notification.store';
 import { randomUUID } from 'crypto';
+import { UnauthorizedError } from '../../shared/errors';
 
 webPush.setVapidDetails(
   env.vapidSubject,
@@ -19,6 +22,7 @@ export async function subscribe(params: {
   subscription: NotificationSubscription;
   stopId: string;
   serviceId?: string;
+  deviceId: string;
   notifyOnApproach?: boolean;
   notifyScheduled?: boolean;
 }): Promise<{ id: string }> {
@@ -29,6 +33,7 @@ export async function subscribe(params: {
     subscription: params.subscription,
     stopId: params.stopId,
     serviceId: params.serviceId ?? null,
+    deviceId: params.deviceId,
     notifyOnApproach: params.notifyOnApproach ?? true,
     notifyScheduled: params.notifyScheduled ?? false,
     createdAt: Date.now(),
@@ -37,7 +42,12 @@ export async function subscribe(params: {
   return { id };
 }
 
-export async function unsubscribe(id: string): Promise<void> {
+export async function unsubscribe(id: string, deviceId: string): Promise<void> {
+  const pref = await getPreference(id);
+  if (!pref) return;
+  if (pref.deviceId !== deviceId) {
+    throw new UnauthorizedError('Not allowed to delete this subscription');
+  }
   await deletePreference(id);
 }
 
@@ -83,4 +93,8 @@ export async function notifyStopApproach(
   }
 }
 
-export { getByStopId, type NotificationPreference };
+export {
+  getByStopId,
+  getByDeviceId,
+  type NotificationPreference,
+};

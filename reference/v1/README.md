@@ -1,6 +1,6 @@
 # FushiGO API v1 — Reference Index
 
-Backend 100% completo. 20 endpoints, 17 testes, 53 arquivos src.
+Backend 100% completo. 21 endpoints, 23 testes, 54 arquivos src.
 
 ## Arquivos
 
@@ -29,3 +29,4 @@ Backend 100% completo. 20 endpoints, 17 testes, 53 arquivos src.
 | `20-notifications-list.md` | GET /v1/notifications/stop/:stopId |
 | `21-vapid-key.md` | GET /v1/vapid-public-key |
 | `22-health.md` | GET /health |
+| `23-notifications-device.md` | GET /v1/notifications (listar próprias) |

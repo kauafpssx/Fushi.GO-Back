@@ -309,42 +309,50 @@ async function checkAndNotify() {
 
 ## 📋 API do Backend
 
-### Registrar notificação
-```
-POST /api/notifications/subscribe
-Body: {
-  serviceId: "...",
-  stopId: "...",
-  pushToken: "...",
-  platform: "android",
-  alerts: {
-    arriving: true,
-    lastBus: true,
-    cancelled: true,
-    delay: false
-  }
-}
-Response: { success: true }
+Endpoints detalhados em `reference/v1/`:
+- `19-notifications-subscribe.md` — POST /v1/notifications/subscribe
+- `20-notifications-delete.md` — DELETE /v1/notifications/:id
+- `21-notifications-list.md` — GET /v1/notifications/stop/:stopId
+- `22-vapid-key.md` — GET /v1/vapid-public-key
+- `23-notifications-device.md` — GET /v1/notifications (listar próprias)
+
+### Resumo dos endpoints
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| `POST` | `/v1/notifications/subscribe` | Criar inscrição de push |
+| `DELETE` | `/v1/notifications/:id` | Remover inscrição (somente proprietário) |
+| `GET` | `/v1/notifications` | Listar inscrições próprias do dispositivo |
+| `GET` | `/v1/notifications/stop/:stopId` | Listar inscrições de uma parada |
+| `GET` | `/v1/vapid-public-key` | Chave pública VAPID |
+
+### Fluxo de uso no frontend
+
+```js
+const { publicKey } = await fetch('/v1/vapid-public-key', {
+  headers: { 'Authorization': `Bearer ${token}`, 'X-Device-Id': deviceId }
+}).then(r => r.json());
+
+const registration = await navigator.serviceWorker.ready;
+const subscription = await registration.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(publicKey),
+});
+
+await fetch('/v1/notifications/subscribe', {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${token}`, 'X-Device-Id': deviceId, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    subscription: subscription.toJSON(),
+    stopId: selectedStopId,
+    notifyOnApproach: true,
+  }),
+});
 ```
 
-### Remover notificação
-```
-DELETE /api/notifications/subscribe/{subscriptionId}
-Response: { success: true }
-```
+## Persistência
 
-### Listar notificações do usuário
-```
-GET /api/notifications/subscriptions
-Response: [
-  {
-    id: "...",
-    routeCode: "M681",
-    stopName: "R. XV de Novembro",
-    alerts: { arriving: true, lastBus: true }
-  }
-]
-```
+As inscrições são armazenadas no Upstash Redis com TTL de 30 dias, indexadas por parada, serviço e dispositivo.
 
 ---
 

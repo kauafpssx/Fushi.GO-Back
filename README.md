@@ -495,6 +495,22 @@ Response: [{
 }]
 ```
 
+#### GET /v1/notifications
+Listar notificações próprias do dispositivo.
+
+```json
+Headers: Authorization: Bearer <token>, X-Device-Id: uuid
+Response: [{
+  "id": "uuid",
+  "stopId": "uuid",
+  "serviceId": "uuid",
+  "deviceId": "uuid",
+  "notifyOnApproach": true,
+  "notifyScheduled": false,
+  "createdAt": 1782075000000
+}]
+```
+
 #### GET /v1/vapid-public-key
 Chave pública VAPID para Web Push.
 
@@ -602,3 +618,4 @@ src/
 | 10 usuários, 5 rotas | ~50 MB | mínimo | 5 req/5s |
 | 100 usuários, 40 rotas | ~60 MB | baixo | 8 req/s |
 | 500 usuários, 200 rotas | ~70 MB | moderado | 40 req/s |
+

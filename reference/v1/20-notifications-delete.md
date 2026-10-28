@@ -17,3 +17,10 @@ X-Device-Id: <deviceId>
   "ok": true
 }
 ```
+
+## Segurança
+
+A exclusão é restrita ao proprietário da inscrição. O `deviceId` da sessão autenticada é comparado com o `deviceId` armazenado na inscrição. Se não coincidirem, a requisição é rejeitada com erro de não autorizado.
+
+- Se a inscrição não existir, a operação é tratada como bem-sucedida (idempotente).
+- Se outra tentativa de excluir uma inscrição de outro dispositivo for feita, retorna `401 Unauthorized`.

@@ -36,6 +36,7 @@ X-Device-Id: <deviceId>
 | GET | `/v1/vehicles/service/:serviceId` | Veículos REST |
 | POST | `/v1/notifications/subscribe` | Criar notificação |
 | DELETE | `/v1/notifications/:id` | Remover notificação |
+| GET | `/v1/notifications` | Listar notificações próprias do dispositivo |
 | GET | `/v1/notifications/stop/:stopId` | Notificações da parada |
 | GET | `/v1/vapid-public-key` | Chave VAPID |
 
