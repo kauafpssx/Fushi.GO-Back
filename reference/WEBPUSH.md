@@ -228,23 +228,22 @@ self.addEventListener('notificationclick', (event) => {
 
 ### Estrutura de dados
 ```javascript
-// Tabela: notifications
+// Tabela: notifications (modelo atual - Redis Hash)
 {
-  userId: "user_123",
-  serviceId: "0ec23b44-d280-11f0-a0e6-02001705c31d",
-  stopId: "35f189cd-7340-4600-b265-6bf526c6345d",
-  routeCode: "M681",
-  stopName: "R. XV de Novembro",
-  pushToken: "fcm_token...",
-  platform: "android", // ou "ios", "web"
-  alerts: {
-    arriving: true,      // "chegando em 3 min"
-    lastBus: true,       // "último ônibus"
-    cancelled: true,     // "linha cancelada"
-    delay: true          // "atrasado 10+ min"
-  },
-  lastNotified: 1782021875000,  // anti-spam
-  createdAt: 1782019067000
+  id: "uuid",
+  endpoint: "https://fcm.googleapis.com/...",
+  p256dh: "...",
+  auth: "...",
+  stopId: "8a5197b2-d51d-49f5-8d30-d6a645a75685",
+  serviceId: "0ebdad7f-d280-11f0-a0e6-02001705c31d",
+  deviceId: "device-123",
+  notifyOnApproach: true,
+  notifyScheduled: false,
+  createdAt: 1782019067000,
+  lastNotified: 1782021875000,
+  lastNotifiedMinute: 1234567,        // minuto de referência (anti-spam por minuto)
+  lastNotifiedPrefix: "M681-1234",   // prefixo do último veículo notificado
+  lastNotifiedPrediction: 300         // previsão em segundos do último veículo notificado
 }
 ```
 
@@ -269,6 +268,16 @@ async function checkAndNotify() {
     const minutesLeft = Math.round(vehicle.prediction / 60);
     
     // 3. Regras de notificação
+    if (sub.lastNotifiedMinute === currentMinute) continue;
+
+    // Evitar notificar o mesmo ônibus novamente
+    if (sub.lastNotifiedPrefix === vehicle.prefix) {
+      // Mesmo ônibus - só notifica se a previsão mudou significativamente (>60s)
+      if (sub.lastNotifiedPrediction == null || Math.abs(sub.lastNotifiedPrediction - vehicle.prediction) <= 60) {
+        continue;
+      }
+    }
+
     const shouldNotify = (
       // Chegando (3-5 min)
       (sub.alerts.arriving && minutesLeft <= 3 && minutesLeft > 0) ||
@@ -295,10 +304,15 @@ async function checkAndNotify() {
         }
       });
       
-      // Atualizar último notify
+      // Atualizar rastreamento
       await db.notifications.update(
         { _id: sub._id },
-        { lastNotified: Date.now() }
+        { 
+          lastNotified: Date.now(),
+          lastNotifiedMinute: currentMinute,
+          lastNotifiedPrefix: vehicle.prefix,
+          lastNotifiedPrediction: vehicle.prediction
+        }
       );
     }
   }

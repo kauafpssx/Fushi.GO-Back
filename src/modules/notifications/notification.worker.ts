@@ -43,6 +43,15 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
     if (isScheduled ? !preference.notifyScheduled : !preference.notifyOnApproach) continue;
     if (preference.lastNotifiedMinute === minute) continue;
 
+    // ← NOVO: Verificar se já notificamos este mesmo ônibus (mesmo prefix)
+    const alreadyNotifiedSameBus = preference.lastNotifiedPrefix === vehicle.prefix;
+    if (alreadyNotifiedSameBus) {
+      // Mesmo ônibus já notificado - verificar se prediction mudou significativamente
+      const predChanged = preference.lastNotifiedPrediction == null || 
+        Math.abs(preference.lastNotifiedPrediction - vehicle.prediction) > 60;
+      if (!predChanged) continue; // Mesmo ônibus, mesma posição -> não notifica novamente
+    }
+
     const sent = await sendPushNotification(
       preference.endpoint,
       preference.p256dh,
@@ -68,7 +77,14 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
       continue;
     }
 
-    await updateLastNotifiedMinute(preference.id, Date.now(), minute);
+    // ← NOVO: Atualizar rastreamento do último ônibus notificado
+    await updateLastNotifiedMinute(
+      preference.id,
+      Date.now(),
+      minute,
+      vehicle.prefix,
+      vehicle.prediction
+    );
   }
 }
 

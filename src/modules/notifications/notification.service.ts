@@ -47,6 +47,8 @@ export async function subscribe(params: {
     createdAt: now,
     lastNotified: 0,
     lastNotifiedMinute: null,
+    lastNotifiedPrefix: null,
+    lastNotifiedPrediction: null,
   });
 
   return { id };

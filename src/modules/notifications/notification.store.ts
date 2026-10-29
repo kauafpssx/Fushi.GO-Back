@@ -27,6 +27,8 @@ export interface NotificationPreference {
   createdAt: number;
   lastNotified: number;
   lastNotifiedMinute: number | null;
+  lastNotifiedPrefix: string | null;
+  lastNotifiedPrediction: number | null;
 }
 
 const PREFIX_SUB = 'notif:sub:';
@@ -53,6 +55,8 @@ export async function savePreference(pref: NotificationPreference): Promise<void
     createdAt: String(pref.createdAt),
     lastNotified: String(pref.lastNotified),
     lastNotifiedMinute: pref.lastNotifiedMinute == null ? '' : String(pref.lastNotifiedMinute),
+    lastNotifiedPrefix: pref.lastNotifiedPrefix ?? '',
+    lastNotifiedPrediction: String(pref.lastNotifiedPrediction ?? 0),
   });
 
   await redis.sadd(stopKey, pref.id);
@@ -84,6 +88,10 @@ export async function getPreference(id: string): Promise<NotificationPreference 
     lastNotifiedMinute: sub.lastNotifiedMinute === '' || sub.lastNotifiedMinute == null
       ? null
       : Number(sub.lastNotifiedMinute),
+    lastNotifiedPrefix: sub.lastNotifiedPrefix === '' ? null : sub.lastNotifiedPrefix,
+    lastNotifiedPrediction: sub.lastNotifiedPrediction === '' || sub.lastNotifiedPrediction == null
+      ? null
+      : Number(sub.lastNotifiedPrediction),
   };
 }
 
@@ -136,12 +144,27 @@ export async function updateLastNotified(id: string, timestamp: number): Promise
   await redis.expire(hashKey, TTL_SECONDS);
 }
 
-export async function updateLastNotifiedMinute(id: string, timestamp: number, minute: number): Promise<void> {
+export async function updateLastNotifiedMinute(
+  id: string, 
+  timestamp: number, 
+  minute: number,
+  prefix: string | null = null,
+  prediction: number | null = null
+): Promise<void> {
   const hashKey = `${PREFIX_SUB}${id}`;
-  await redis.hset(hashKey, {
+  const updates: Record<string, string> = {
     lastNotified: String(timestamp),
     lastNotifiedMinute: String(minute),
-  });
+  };
+  
+  if (prefix !== null) {
+    updates.lastNotifiedPrefix = prefix;
+  }
+  if (prediction !== null) {
+    updates.lastNotifiedPrediction = String(prediction);
+  }
+  
+  await redis.hset(hashKey, updates);
   await redis.expire(hashKey, TTL_SECONDS);
 }
 

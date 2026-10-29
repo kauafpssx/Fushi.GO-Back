@@ -63,7 +63,9 @@ describe('notification worker', () => {
     expect(mocks.updateLastNotifiedMinute).toHaveBeenLastCalledWith(
       'subscription-1',
       expect.any(Number),
-      4
+      4,
+      expect.any(String),
+      expect.any(Number)
     );
 
     mocks.currentMinute = 3;
@@ -73,7 +75,9 @@ describe('notification worker', () => {
     expect(mocks.updateLastNotifiedMinute).toHaveBeenLastCalledWith(
       'subscription-1',
       expect.any(Number),
-      3
+      3,
+      expect.any(String),
+      expect.any(Number)
     );
   });
 });
