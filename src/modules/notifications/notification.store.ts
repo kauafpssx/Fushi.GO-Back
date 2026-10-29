@@ -189,6 +189,32 @@ export async function updateNotificationState(
   await redis.expire(hashKey, TTL_SECONDS);
 }
 
+export async function updateNotificationTracking(
+  id: string,
+  state: NotificationState | null,
+  prefix: string | null = null,
+  prediction: number | null = null,
+  minute: number | null = null
+): Promise<void> {
+  const hashKey = `${PREFIX_SUB}${id}`;
+  const updates: Record<string, string> = {
+    lastNotifiedState: state ?? '',
+  };
+  
+  if (prefix !== null) {
+    updates.lastNotifiedPrefix = prefix;
+  }
+  if (prediction !== null) {
+    updates.lastNotifiedPrediction = String(prediction);
+  }
+  if (minute !== null) {
+    updates.lastNotifiedMinute = String(minute);
+  }
+  
+  await redis.hset(hashKey, updates);
+  await redis.expire(hashKey, TTL_SECONDS);
+}
+
 export async function getAllPreferences(): Promise<NotificationPreference[]> {
   let ids = await redis.smembers(ALL_SUBSCRIPTIONS_KEY);
 

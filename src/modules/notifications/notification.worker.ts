@@ -1,6 +1,6 @@
 import { getPredictionService } from '../predictions/predictions.service';
 import type { StopPredictionService } from '../predictions/predictions.types';
-import { getAllPreferences, updateNotificationState, type NotificationPreference } from './notification.store';
+import { getAllPreferences, updateNotificationState, updateNotificationTracking, type NotificationPreference } from './notification.store';
 import { sendPushNotification } from './notification.service';
 import { getStop } from '../services/stops.service';
 import type { Stop } from '../services/stops.service';
@@ -276,25 +276,49 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
     const state = determineState(etaSeconds, preference, stop, walkingMinutes);
     const minuteDisplay = Math.floor(etaSeconds / 60);
 
-    // Aplicar prioridade - se já tem estado notificado com maior prioridade, não sobrepor indevidamente
-    if (preference.lastNotifiedState && preference.lastNotifiedPrefix === vehicle.prefix) {
-      const lastPriority = getStatePriority(preference.lastNotifiedState);
-      const currentPriority = getStatePriority(state);
-      
-      // Não notificar se já tem estado com maior ou igual prioridade e não mudou
-      if (lastPriority <= currentPriority && state !== 'departureReminder') {
-        currentNotifiedSet.push(preference.id);
-        continue;
-      }
-      
-      // departureReminder tem cooldown
-      if (state === 'departureReminder' && preference.lastNotifiedState === 'departureReminder') {
-        if (preference.lastNotified && Date.now() - preference.lastNotified < 5 * 60 * 1000) {
+      // Aplicar prioridade - se já tem estado notificado com maior prioridade, não sobrepor indevidamente
+      if (preference.lastNotifiedState && preference.lastNotifiedPrefix === vehicle.prefix) {
+        const lastPriority = getStatePriority(preference.lastNotifiedState);
+        const currentPriority = getStatePriority(state);
+        
+        // Não notificar se já tem estado com maior ou igual prioridade e não mudou
+        if (lastPriority <= currentPriority && state !== 'departureReminder') {
+          // Atualizar tracking mesmo sem enviar notificação
+          await updateNotificationTracking(
+            preference.id,
+            state,
+            vehicle.prefix,
+            etaSeconds,
+            minuteDisplay
+          );
           currentNotifiedSet.push(preference.id);
           continue;
         }
+        
+        // departureReminder tem cooldown
+        if (state === 'departureReminder' && preference.lastNotifiedState === 'departureReminder') {
+          if (preference.lastNotified && Date.now() - preference.lastNotified < 5 * 60 * 1000) {
+            await updateNotificationTracking(
+              preference.id,
+              state,
+              vehicle.prefix,
+              etaSeconds,
+              minuteDisplay
+            );
+            currentNotifiedSet.push(preference.id);
+            continue;
+          }
+        }
+      } else {
+        // Atualizar tracking sempre que processamos
+        await updateNotificationTracking(
+          preference.id,
+          state,
+          vehicle.prefix,
+          etaSeconds,
+          minuteDisplay
+        );
       }
-    }
 
     const notification = buildNotification(
       state,

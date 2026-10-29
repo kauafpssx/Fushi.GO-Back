@@ -71,6 +71,7 @@ vi.mock('../modules/notifications/notification.store', () => ({
   getAllPreferences: mocks.getAllPreferences,
   removeSubscription: mocks.removeSubscription,
   updateNotificationState: mocks.updateNotificationState,
+  updateNotificationTracking: vi.fn(async () => undefined),
   updateLastNotifiedMinute: vi.fn(async () => undefined),
 }));
 
