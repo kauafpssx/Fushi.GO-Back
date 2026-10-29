@@ -157,7 +157,7 @@ async function deleteLastSeen(groupKey: string): Promise<void> {
   }
 }
 
-async function processGroup(preferences: NotificationPreference[]): Promise<void> {
+async function processGroup(preferences: NotificationPreference[], sentThisTick?: Set<string>): Promise<void> {
   const first = preferences[0];
   if (!first || !first.serviceId) return;
 
@@ -293,6 +293,21 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
     }
     const minuteDisplay = Math.floor(etaSeconds / 60);
 
+    // Lock por ciclo do worker
+    const tickKey = `${preference.id}:${vehicle.prefix}:${minuteDisplay}:${state}`;
+    if (sentThisTick?.has(tickKey)) {
+      console.log(`[NOTIFY-SKIP-TICK] duplicate in same tick ${tickKey}`);
+      await updateNotificationTracking(
+        preference.id,
+        state,
+        vehicle.prefix,
+        etaSeconds,
+        minuteDisplay
+      );
+      currentNotifiedSet.push(preference.id);
+      continue;
+    }
+
     // Deduplicação rígida: mesmo estado, mesmo ônibus, mesmo minuto -> não reenviar
     if (
       preference.lastNotifiedState === state &&
@@ -419,6 +434,10 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
       }
     );
 
+    if (sent && sentThisTick) {
+      sentThisTick.add(tickKey);
+    }
+
     console.log(`[NOTIFY-SEND] sub=${preference.id} | prefix=${vehicle.prefix} | route=${prediction.routeCode} | state=${state} | etaSec=${etaSeconds} | min=${minuteDisplay} | sent=${sent}`);
 
     if (sent) {
@@ -443,13 +462,14 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
     notifiedPrefixes: currentNotifiedSet,
   });
 }
-
-export async function runNotificationWorker(logger: FastifyBaseLogger): Promise<void> {
+export async function runNotificationWorker(logger: FastifyBaseLogger): Promise<void>
+{
   const preferences = await getAllPreferences();
   const groups = groupByStopAndService(preferences);
+  const sentThisTick = new Set<string>();
 
   const results = await Promise.allSettled(
-    Array.from(groups.values(), (group) => processGroup(group))
+    Array.from(groups.values(), (group) => processGroup(group, sentThisTick))
   );
 
   for (const result of results) {
