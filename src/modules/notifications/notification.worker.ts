@@ -95,6 +95,8 @@ function getStatePriority(state: NotificationState): number {
 }
 
 function buildNotification(state: NotificationState, routeCode: string, prefix: string, minute: number, distance?: number) {
+  const dist = distance && distance > 0 ? Math.round(distance) : null;
+
   if (state === 'departureReminder') {
     return {
       title: `⏰ Hora de sair! Linha ${routeCode}`,
@@ -108,22 +110,18 @@ function buildNotification(state: NotificationState, routeCode: string, prefix: 
     };
   }
   if (state === 'imminent') {
-    if (minute < 1) {
-      return {
-        title: `🚌 Linha ${routeCode} – Chega em menos de 1 min`,
-        body: `O ônibus ${prefix} está a poucos metros da tua parada!`,
-      };
-    }
     return {
       title: `🚌 Linha ${routeCode} – Tá chegando!`,
-      body: `O ônibus ${prefix} está a poucos metros da tua parada!`,
+      body: dist && dist < 300
+        ? `O ônibus ${prefix} está a ${dist}m da tua parada!`
+        : `O ônibus ${prefix} está a poucos metros da tua parada!`,
     };
   }
   if (state === 'approaching') {
     return {
       title: `🚌 Linha ${routeCode} – Faltam ${minute < 1 ? 0 : minute} min`,
-      body: distance && distance > 0
-        ? `O ônibus ${prefix} está a ${Math.round(distance)}m da tua parada.`
+      body: dist
+        ? `O ônibus ${prefix} está a ${dist}m da tua parada.`
         : `O ônibus ${prefix} está a ${minute < 1 ? 0 : minute} min da tua parada.`,
     };
   }
