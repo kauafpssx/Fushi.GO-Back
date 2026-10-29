@@ -77,8 +77,8 @@ export async function getPreference(id: string): Promise<NotificationPreference 
     stopId: sub.stopId,
     serviceId: sub.serviceId,
     deviceId: sub.deviceId,
-    notifyOnApproach: sub.notifyOnApproach === 'true',
-    notifyScheduled: sub.notifyScheduled === 'true',
+    notifyOnApproach: String(sub.notifyOnApproach) === 'true',
+    notifyScheduled: String(sub.notifyScheduled) === 'true',
     createdAt: Number(sub.createdAt),
     lastNotified: Number(sub.lastNotified),
     lastNotifiedMinute: sub.lastNotifiedMinute === '' || sub.lastNotifiedMinute == null
