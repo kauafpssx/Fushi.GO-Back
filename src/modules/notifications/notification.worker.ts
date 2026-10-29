@@ -5,21 +5,31 @@ import { sendPushNotification } from './notification.service';
 import { getStop } from '../services/stops.service';
 import type { Stop } from '../services/stops.service';
 import type { FastifyBaseLogger } from 'fastify';
+import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+});
 
 const CHECK_INTERVAL_MS = 30_000;
 const APPROACH_THRESHOLD_MINUTES = 15;
 const SAFETY_MARGIN_MINUTES = 2.5;
+const WALKING_CORRECTION = 1.25;
+const WALKING_SPEED_M_PER_MIN = 72;
 
 type NotificationState = 'normal' | 'approaching' | 'imminent' | 'arrived' | 'departureReminder';
 
 interface LastSeenVehicle {
   prefix: string;
-  prediction: number;
-  notifiedPrefixes: Set<string>;
-  seenAt: number;
+  lastState: NotificationState;
+  lastPrediction: number;
+  missCount: number;
+  lastSeenAt: number;
+  notifiedPrefixes: string[]; // ids of preferences notified
 }
 
-const lastSeenByGroup = new Map<string, LastSeenVehicle>();
+const PREFIX_LAST_SEEN = 'notif:lastseen:';
 
 function groupByStopAndService(preferences: NotificationPreference[]): Map<string, NotificationPreference[]> {
   const groups = new Map<string, NotificationPreference[]>();
@@ -42,12 +52,12 @@ function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number)
 }
 
 function calcWalkingMinutes(userLat: number, userLng: number, stopLat: number, stopLng: number): number {
-  const meters = haversineMeters(userLat, userLng, stopLat, stopLng);
-  return Math.ceil(meters / 72);
+  const meters = haversineMeters(userLat, userLng, stopLat, stopLng) * WALKING_CORRECTION;
+  return Math.ceil(meters / WALKING_SPEED_M_PER_MIN);
 }
 
 function determineState(
-  etaMinutes: number,
+  etaSeconds: number,
   preference: NotificationPreference,
   stop: Stop | null,
   walkingMinutesOverride?: number | null
@@ -58,19 +68,30 @@ function determineState(
       ? calcWalkingMinutes(preference.userLat, preference.userLng, stop.lat, stop.lng)
       : preference.walkingMinutes);
 
+  // Departure reminder tem prioridade relativa - será tratado na lógica de prioridade
   if (preference.enableDepartureReminder !== false && walkingMinutes && walkingMinutes > 0) {
+    const etaMinutes = etaSeconds / 60;
     if (etaMinutes <= walkingMinutes + SAFETY_MARGIN_MINUTES && etaMinutes >= Math.max(0.5, walkingMinutes - 1)) {
       return 'departureReminder';
     }
   }
 
-  if (etaMinutes < 1) {
+  if (etaSeconds < 60) {
     return 'imminent';
   }
-  if (etaMinutes <= 5) {
+  if (etaSeconds <= 300) {
     return 'approaching';
   }
   return 'normal';
+}
+
+function getStatePriority(state: NotificationState): number {
+  if (state === 'arrived') return 1;
+  if (state === 'departureReminder') return 2;
+  if (state === 'imminent') return 3;
+  if (state === 'approaching') return 4;
+  if (state === 'normal') return 5;
+  return 10;
 }
 
 function buildNotification(state: NotificationState, routeCode: string, prefix: string, minute: number, distance?: number) {
@@ -87,6 +108,12 @@ function buildNotification(state: NotificationState, routeCode: string, prefix: 
     };
   }
   if (state === 'imminent') {
+    if (minute < 1) {
+      return {
+        title: `🚌 Linha ${routeCode} – Chega em menos de 1 min`,
+        body: `O ônibus ${prefix} está a poucos metros da tua parada!`,
+      };
+    }
     return {
       title: `🚌 Linha ${routeCode} – Tá chegando!`,
       body: `O ônibus ${prefix} está a poucos metros da tua parada!`,
@@ -106,6 +133,32 @@ function buildNotification(state: NotificationState, routeCode: string, prefix: 
   };
 }
 
+async function getLastSeen(groupKey: string): Promise<LastSeenVehicle | null> {
+  try {
+    const data = await redis.get(`${PREFIX_LAST_SEEN}${groupKey}`);
+    if (!data) return null;
+    return JSON.parse(data as string) as LastSeenVehicle;
+  } catch {
+    return null;
+  }
+}
+
+async function setLastSeen(groupKey: string, data: LastSeenVehicle): Promise<void> {
+  try {
+    await redis.set(`${PREFIX_LAST_SEEN}${groupKey}`, JSON.stringify(data), { ex: 600 }); // 10 min TTL
+  } catch {
+    // ignore
+  }
+}
+
+async function deleteLastSeen(groupKey: string): Promise<void> {
+  try {
+    await redis.del(`${PREFIX_LAST_SEEN}${groupKey}`);
+  } catch {
+    // ignore
+  }
+}
+
 async function processGroup(preferences: NotificationPreference[]): Promise<void> {
   const first = preferences[0];
   if (!first || !first.serviceId) return;
@@ -118,59 +171,84 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
     .sort((a, b) => a.prediction - b.prediction);
   const vehicle = vehicles[0];
 
-  const lastSeen = lastSeenByGroup.get(groupKey);
-  if (!vehicle && lastSeen && lastSeen.prefix && lastSeen.notifiedPrefixes.size > 0) {
-    for (const preference of preferences) {
-      if (!lastSeen.notifiedPrefixes.has(preference.id)) continue;
-      if (preference.lastNotifiedState === 'arrived' && preference.lastNotifiedPrefix === lastSeen.prefix) continue;
+  const lastSeen = await getLastSeen(groupKey);
+  
+  // Veículo sumiu - verificar se deve notificar chegada
+  if (!vehicle && lastSeen && lastSeen.prefix && lastSeen.notifiedPrefixes && lastSeen.notifiedPrefixes.length > 0) {
+    lastSeen.missCount = (lastSeen.missCount || 0) + 1;
+    
+    // Só notifica arrived se: sumiu por pelo menos 2 ciclos, estava próximo e foi notificado
+    const shouldNotifyArrived = 
+      lastSeen.missCount >= 2 &&
+      lastSeen.lastPrediction <= 300 && // estava a <= 5 min
+      (lastSeen.lastState === 'imminent' || lastSeen.lastState === 'approaching' || lastSeen.lastState === 'departureReminder');
+    
+    if (shouldNotifyArrived) {
+      for (const preference of preferences) {
+        if (!lastSeen.notifiedPrefixes.includes(preference.id)) continue;
+        if (preference.lastNotifiedState === 'arrived' && preference.lastNotifiedPrefix === lastSeen.prefix) continue;
 
-      const sent = await sendPushNotification(
-        preference.endpoint,
-        preference.p256dh,
-        preference.auth,
-        {
-          title: `✅ Linha ${prediction.routeCode} – Chegou!`,
-          body: `O ônibus ${lastSeen.prefix} chegou à tua parada.`,
-          icon: '/icons/icon-192.svg',
-          badge: '/icons/icon-192.svg',
-          tag: `bus-${prediction.serviceId}-${prediction.stopId}`,
-          data: {
-            url: '/',
-            stopId: prediction.stopId,
-            serviceId: prediction.serviceId,
-            state: 'arrived',
-          },
-        }
-      );
-
-      if (sent) {
-        await updateNotificationState(
-          preference.id,
-          Date.now(),
-          'arrived',
-          lastSeen.prefix,
-          lastSeen.prediction,
-          null
+        const sent = await sendPushNotification(
+          preference.endpoint,
+          preference.p256dh,
+          preference.auth,
+          {
+            title: `✅ Linha ${prediction.routeCode} – Chegou!`,
+            body: `O ônibus ${lastSeen.prefix} chegou à tua parada.`,
+            icon: '/icons/icon-192.svg',
+            badge: '/icons/icon-192.svg',
+            tag: `bus-${prediction.serviceId}-${prediction.stopId}`,
+            data: {
+              url: '/',
+              stopId: prediction.stopId,
+              serviceId: prediction.serviceId,
+              state: 'arrived',
+            },
+          }
         );
+
+        if (sent) {
+          await updateNotificationState(
+            preference.id,
+            Date.now(),
+            'arrived',
+            lastSeen.prefix,
+            lastSeen.lastPrediction,
+            null
+          );
+        }
       }
+      await deleteLastSeen(groupKey);
+      return;
     }
-    lastSeenByGroup.delete(groupKey);
+    
+    // Ainda não confirmou chegada, atualiza contador
+    if (lastSeen.missCount < 2) {
+      await setLastSeen(groupKey, lastSeen);
+      return;
+    }
+    
+    // Já tentou confirmar mas não atingiu critérios ou já passou 2 ciclos sem confirmação
+    await deleteLastSeen(groupKey);
     return;
   }
 
   if (!vehicle) {
-    lastSeenByGroup.delete(groupKey);
+    if (lastSeen) {
+      await deleteLastSeen(groupKey);
+    }
     return;
   }
 
   const etaSeconds = vehicle.prediction;
-  const etaMinutes = etaSeconds / 60;
-  if (etaMinutes > APPROACH_THRESHOLD_MINUTES) {
-    lastSeenByGroup.set(groupKey, {
+  if (etaSeconds / 60 > APPROACH_THRESHOLD_MINUTES) {
+    await setLastSeen(groupKey, {
       prefix: vehicle.prefix,
-      prediction: etaSeconds,
-      notifiedPrefixes: lastSeen?.notifiedPrefixes ?? new Set(),
-      seenAt: Date.now(),
+      lastState: 'normal',
+      lastPrediction: etaSeconds,
+      missCount: 0,
+      lastSeenAt: Date.now(),
+      notifiedPrefixes: lastSeen?.notifiedPrefixes || [],
     });
     return;
   }
@@ -182,7 +260,7 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
     stop = null;
   }
 
-  const currentNotifiedSet = new Set<string>();
+  const currentNotifiedSet: string[] = [];
 
   for (const preference of preferences) {
     const isScheduled = vehicle.type === 'SCHEDULE';
@@ -195,22 +273,26 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
       walkingMinutes = preference.walkingMinutes;
     }
 
-    const state = determineState(etaMinutes, preference, stop, walkingMinutes);
-    const minuteDisplay = Math.floor(etaMinutes);
+    const state = determineState(etaSeconds, preference, stop, walkingMinutes);
+    const minuteDisplay = Math.floor(etaSeconds / 60);
 
-    if (
-      preference.lastNotifiedState === state &&
-      preference.lastNotifiedPrefix === vehicle.prefix &&
-      state !== 'departureReminder'
-    ) {
-      currentNotifiedSet.add(preference.id);
-      continue;
-    }
-
-    if (preference.lastNotifiedState === state && preference.lastNotifiedPrefix === vehicle.prefix && state === 'departureReminder') {
-      if (preference.lastNotified && Date.now() - preference.lastNotified < 5 * 60 * 1000) {
-        currentNotifiedSet.add(preference.id);
+    // Aplicar prioridade - se já tem estado notificado com maior prioridade, não sobrepor indevidamente
+    if (preference.lastNotifiedState && preference.lastNotifiedPrefix === vehicle.prefix) {
+      const lastPriority = getStatePriority(preference.lastNotifiedState);
+      const currentPriority = getStatePriority(state);
+      
+      // Não notificar se já tem estado com maior ou igual prioridade e não mudou
+      if (lastPriority <= currentPriority && state !== 'departureReminder') {
+        currentNotifiedSet.push(preference.id);
         continue;
+      }
+      
+      // departureReminder tem cooldown
+      if (state === 'departureReminder' && preference.lastNotifiedState === 'departureReminder') {
+        if (preference.lastNotified && Date.now() - preference.lastNotified < 5 * 60 * 1000) {
+          currentNotifiedSet.push(preference.id);
+          continue;
+        }
       }
     }
 
@@ -241,7 +323,7 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
     );
 
     if (sent) {
-      currentNotifiedSet.add(preference.id);
+      currentNotifiedSet.push(preference.id);
       await updateNotificationState(
         preference.id,
         Date.now(),
@@ -253,16 +335,17 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
     }
   }
 
-  lastSeenByGroup.set(groupKey, {
+  await setLastSeen(groupKey, {
     prefix: vehicle.prefix,
-    prediction: etaSeconds,
+    lastState: vehicle.type === 'SCHEDULE' ? 'normal' : (etaSeconds < 60 ? 'imminent' : etaSeconds <= 300 ? 'approaching' : 'normal'),
+    lastPrediction: etaSeconds,
+    missCount: 0,
+    lastSeenAt: Date.now(),
     notifiedPrefixes: currentNotifiedSet,
-    seenAt: Date.now(),
   });
 }
 
-export async function runNotificationWorker(logger: FastifyBaseLogger): Promise<void>
-{
+export async function runNotificationWorker(logger: FastifyBaseLogger): Promise<void> {
   const preferences = await getAllPreferences();
   const groups = groupByStopAndService(preferences);
 
