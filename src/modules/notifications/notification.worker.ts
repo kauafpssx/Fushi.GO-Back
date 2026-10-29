@@ -267,6 +267,14 @@ async function processGroup(preferences: NotificationPreference[], sentThisTick?
   const currentNotifiedSet: string[] = [];
 
   for (const preference of preferences) {
+    if (preference.serviceId && first.serviceId && preference.serviceId !== first.serviceId) {
+      console.log(`[NOTIFY-SKIP-WRONG-SERVICE] pref=${preference.id} prefService=${preference.serviceId} groupService=${first.serviceId}`);
+      continue;
+    }
+    if (preference.stopId !== first.stopId) {
+      continue;
+    }
+
     const isScheduled = vehicle.type === 'SCHEDULE';
     if (isScheduled ? !preference.notifyScheduled : !preference.notifyOnApproach) continue;
 
