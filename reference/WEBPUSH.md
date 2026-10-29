@@ -8,46 +8,39 @@ Sistema de notificações via navegador para alertar o usuário sobre eventos im
 
 ## 🎯 Regra de Ouro
 
-> **Web Push = Alertas importantes**
-> **WebSocket = Tracking em tempo real**
+> **Web Push = acompanhamento em segundo plano**  
+> **SSE = tracking em tempo real com o site aberto**
 
-Nunca mande notificação a cada minuto. Use push apenas em **eventos pontuais**.
+O worker atual pode enviar uma nova notificação quando a minutagem muda, mas evita
+repetir o mesmo estado do mesmo veículo.
 
 ---
 
-## ⚠️ Por que NÃO enviar a cada 1 minuto
+## ⚠️ Controle de repetição
 
 | Problema | Consequência |
 |----------|--------------|
-| Spam | Usuário bloqueia notificações |
+| Repetir a mesma previsão | Usuário bloqueia notificações |
 | Bateria | Drena bateria do celular |
 | Dados | Consome dados desnecessariamente |
 | UX | Experiência ruim = abandono |
 | Chrome | Pode limitar/bloquear seu push |
 
-**Solução**: Web Push para **3-5 eventos importantes**, WebSocket para tracking contínuo.
+**Solução atual**: o worker identifica o veículo pelo `prefix`, registra a última
+previsão enviada e só reenvia quando a minutagem muda e a previsão varia mais de
+60 segundos para o mesmo veículo.
 
 ---
 
 ## ✅ Eventos que JUSTIFICAM notificação
 
-### Nível 1 — Críticos (sempre notificar)
-| Evento | Exemplo | Quando |
-|--------|---------|--------|
-| Ônibus chegando | "2309 em 3 min no ponto" | 3-5 min antes |
-| Último ônibus | "Último 2309 saindo agora" | Quando for o último |
-| Linha cancelada | "Linha M681 cancelada hoje" | Quando cancelar |
+| Evento | Preferência | Quando |
+|--------|-------------|--------|
+| Veículo em aproximação | `notifyOnApproach` | Previsão em tempo real de 0 a 15 min |
+| Viagem programada | `notifyScheduled` | Previsão `type: "SCHEDULE"` de 0 a 15 min |
 
-### Nível 2 — Importantes (usuário escolhe)
-| Evento | Exemplo | Quando |
-|--------|---------|--------|
-| Ônibus passou no ponto anterior | "2309 saiu de R. XV" | Quando sair |
-| Atraso significativo | "2309 atrasado 15 min" | Quando atraso > 10 min |
-
-### Nível 3 — Opcionais
-| Evento | Exemplo | Quando |
-|--------|---------|--------|
-| Primeiro ônibus do dia | "Primeiro M681 saindo 6h" | Início do expediente |
+O worker seleciona o veículo com a menor previsão não negativa. Eventos de último
+ônibus, cancelamento e atraso não estão implementados atualmente.
 
 ---
 
@@ -56,10 +49,8 @@ Nunca mande notificação a cada minuto. Use push apenas em **eventos pontuais**
 | Evento | Motivo |
 |--------|--------|
 | Posição a cada 1 min | Spam, use WebSocket |
-| "Ônibus em 12 min" | Não é urgente |
-| "Ônibus em 8 min" | Não é urgente |
 | Mudança de velocidade | Irrelevante |
-| Qualquer coisa a cada < 5 min | Spam |
+| Previsão acima de 15 min | Fora do limiar do worker |
 
 ---
 
@@ -90,26 +81,25 @@ Nunca mande notificação a cada minuto. Use push apenas em **eventos pontuais**
 │  BACKEND REGISTRA:                                  │
 │  • serviceId: 0ec23b44...                           │
 │  • stopId: 35f189cd...                              │
-│  • pushToken: do usuário                            │
-│  • alertas: ["chegando", "ultimo", "cancelado"]     │
+│  • subscription: endpoint + chaves Web Push         │
+│  • preferências: aproximação e/ou horário agendado  │
 └──────────────────────┬──────────────────────────────┘
                        │
                        ▼
 ┌─────────────────────────────────────────────────────┐
 │  BACKEND MONITORA (a cada 30s):                     │
-│  • Busca previsão /prediction/service/{id}/{stopId} │
-│  • Calcula quando o ônibus chega                    │
+│  • Busca previsão do par serviceId + stopId         │
+│  • Seleciona a previsão não negativa mais próxima   │
 │  • Decide SE deve notificar                         │
 └──────────────────────┬──────────────────────────────┘
                        │
                        ▼
 ┌─────────────────────────────────────────────────────┐
 │  CONDIÇÕES PARA NOTIFICAR:                          │
-│  1. Previsão <= 3 minutos                           │
-│  2. Último ônibus do dia                            │
-│  3. Linha cancelada                                 │
-│  4. Usuário NÃO está com site aberto                │
-│  5. Não notificou nos últimos 10 min (anti-spam)    │
+│  1. Previsão entre 0 e 15 minutos                   │
+│  2. Preferência correspondente está habilitada      │
+│  3. A minutagem ainda não foi notificada            │
+│  4. Mesmo veículo variou mais de 60s                │
 └──────────────────────┬──────────────────────────────┘
                        │
                        ▼
@@ -241,7 +231,7 @@ self.addEventListener('notificationclick', (event) => {
   notifyScheduled: false,
   createdAt: 1782019067000,
   lastNotified: 1782021875000,
-  lastNotifiedMinute: 1234567,        // minuto de referência (anti-spam por minuto)
+  lastNotifiedMinute: 5,              // última previsão enviada, em minutos
   lastNotifiedPrefix: "M681-1234",   // prefixo do último veículo notificado
   lastNotifiedPrediction: 300         // previsão em segundos do último veículo notificado
 }
@@ -249,9 +239,9 @@ self.addEventListener('notificationclick', (event) => {
 
 ### Worker de verificação
 ```javascript
-// Verifica a cada 30 segundos
+// Pseudocódigo equivalente à regra atual; verifica a cada 30 segundos
 async function checkAndNotify() {
-  const subscriptions = await db.notifications.find({});
+  const subscriptions = await getAllPreferences();
   
   for (const sub of subscriptions) {
     // 1. Buscar previsão
@@ -265,7 +255,7 @@ async function checkAndNotify() {
     if (data.vehicles.length === 0) continue;
     
     const vehicle = data.vehicles[0];
-    const minutesLeft = Math.round(vehicle.prediction / 60);
+    const minutesLeft = Math.floor(vehicle.prediction / 60);
     
     // 3. Regras de notificação
     if (sub.lastNotifiedMinute === currentMinute) continue;
@@ -278,29 +268,24 @@ async function checkAndNotify() {
       }
     }
 
-    const shouldNotify = (
-      // Chegando (3-5 min)
-      (sub.alerts.arriving && minutesLeft <= 3 && minutesLeft > 0) ||
-      // Último ônibus
-      (sub.alerts.lastBus && isLastBusOfDay(sub.serviceId)) ||
-      // Cancelado
-      (sub.alerts.cancelled && isCancelled(sub.serviceId)) ||
-      // Atrasado
-      (sub.alerts.delay && minutesLeft > 20)
-    );
-    
-    // 4. Anti-spam (não notificar se já notificou nos últimos 10 min)
-    const timeSinceLastNotify = Date.now() - sub.lastNotified;
-    if (timeSinceLastNotify < 10 * 60 * 1000) continue;
+    if (minutesLeft < 0 || minutesLeft > 15) continue;
+    const isScheduled = vehicle.type === 'SCHEDULE';
+    const shouldNotify = isScheduled
+      ? sub.notifyScheduled
+      : sub.notifyOnApproach;
     
     // 5. Enviar push
     if (shouldNotify) {
       await sendPush(sub, {
-        title: `🚌 ${vehicle.prefix || sub.routeCode} chegando!`,
-        body: `Em ${minutesLeft} minutos na ${sub.stopName}`,
-        tag: `bus-${vehicle.id}-${sub.stopId}`,
+        title: `🚌 Linha ${data.routeCode} chegando!`,
+        body: minutesLeft < 1
+          ? `O ônibus ${vehicle.prefix} está chegando na tua parada.`
+          : `O ônibus ${vehicle.prefix} está a aproximadamente ${minutesLeft} min da tua parada.`,
+        tag: `bus-${sub.serviceId}-${sub.stopId}`,
         data: {
-          url: `/tracking?service=${sub.serviceId}&stop=${sub.stopId}`
+          url: '/',
+          serviceId: sub.serviceId,
+          stopId: sub.stopId
         }
       });
       
@@ -370,24 +355,24 @@ As inscrições são armazenadas no Upstash Redis com TTL de 30 dias, indexadas 
 
 ---
 
-## 📊 Resumo de Eventos
+## 📊 Resumo do comportamento atual
 
 | Evento | Frequência | Urgência | Push? |
 |--------|------------|----------|-------|
-| Chegando (3 min) | 1x por viagem | Alta | ✅ Sim |
-| Chegando (8 min) | 1x por viagem | Baixa | ❌ Não |
-| Último ônibus | 1x por dia | Alta | ✅ Sim |
-| Cancelado | 1x por dia | Alta | ✅ Sim |
-| Atrasado 10+ min | Quando atrasar | Média | ✅ Sim |
-| Posição a cada 1 min | Muitas | Nenhuma | ❌ Nunca |
+| Aproximação em 0–15 min | Conforme mudança da previsão | Alta | ✅ `notifyOnApproach` |
+| Horário `SCHEDULE` em 0–15 min | Conforme mudança da previsão | Média | ✅ `notifyScheduled` |
+| Previsão acima de 15 min | A cada consulta | Baixa | ❌ Não |
+| Último ônibus/cancelamento/atraso | — | — | ❌ Não implementado |
 
 ---
 
 ## ⚠️ Cuidados
 
-1. **Anti-spam**: Mínimo 10 min entre notificações do mesmo usuário
-2. **Horário**: Não notificar entre 23h e 6h (exceto noturnas)
-3. **Consentimento**: Usuário deve ativar manualmente
+1. **Deduplicação**: feita por minutagem, prefixo do veículo e variação da previsão
+2. **Intervalo**: o worker consulta os grupos ativos a cada 30 segundos e impede ticks concorrentes
+3. **Consentimento**: o usuário deve ativar manualmente
+4. **Inscrição sem `serviceId`**: é aceita pela API, mas não é processada pelo worker
+5. **Expiração**: hashes e índices por parada/dispositivo têm TTL de 30 dias; `notif:all` é o índice global
 4. **Fácil desativar**: Botão "Parar notificações" acessível
 5. **Testar em iOS**: Safari tem limitações diferentes
 6. **PWA instalado**: iOS só funciona com site instalado na tela inicial

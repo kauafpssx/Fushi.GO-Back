@@ -81,6 +81,7 @@ const basePref: NotificationPreference = {
   lastNotifiedMinute: null,
   lastNotifiedPrefix: null,
   lastNotifiedPrediction: null,
+  lastNotifiedState: null,
 };
 
 beforeEach(() => {

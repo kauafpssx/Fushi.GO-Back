@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { env } from '../../app/env';
 import { subscribe, unsubscribe, getByStopId, getDeviceSubscriptions } from './notification.service';
+import { getPreference } from './notification.store';
 import { validate } from '../../middleware/validate.middleware';
 
 const subscriptionSchema = z.object({
@@ -18,6 +19,10 @@ const subscribeBodySchema = z.object({
   serviceId: z.string().uuid().optional(),
   notifyOnApproach: z.boolean().optional().default(true),
   notifyScheduled: z.boolean().optional().default(false),
+  userLat: z.number().optional(),
+  userLng: z.number().optional(),
+  walkingMinutes: z.number().optional(),
+  enableDepartureReminder: z.boolean().optional().default(true),
 });
 
 const stopIdParamsSchema = z.object({
@@ -49,6 +54,10 @@ export async function notificationsRoutes(app: FastifyInstance) {
         deviceId,
         notifyOnApproach: body.notifyOnApproach,
         notifyScheduled: body.notifyScheduled,
+        userLat: body.userLat,
+        userLng: body.userLng,
+        walkingMinutes: body.walkingMinutes,
+        enableDepartureReminder: body.enableDepartureReminder,
       });
       return result;
     }
@@ -90,5 +99,29 @@ export async function notificationsRoutes(app: FastifyInstance) {
       createdAt: p.createdAt,
       lastNotified: p.lastNotified,
     }));
+  });
+
+  app.get('/notifications/:id/status', async (request, reply) => {
+    const { id } = subIdParamsSchema.parse(request.params);
+    const deviceId = (request as any).deviceId as string;
+    const pref = await getPreference(id);
+    if (!pref || pref.deviceId !== deviceId) {
+      reply.code(404).send({ error: 'Not found' });
+      return;
+    }
+    return {
+      id: pref.id,
+      stopId: pref.stopId,
+      serviceId: pref.serviceId,
+      lastNotified: pref.lastNotified,
+      lastNotifiedState: pref.lastNotifiedState,
+      lastNotifiedPrefix: pref.lastNotifiedPrefix,
+      lastNotifiedPrediction: pref.lastNotifiedPrediction,
+      lastNotifiedMinute: pref.lastNotifiedMinute,
+      notifyOnApproach: pref.notifyOnApproach,
+      notifyScheduled: pref.notifyScheduled,
+      enableDepartureReminder: pref.enableDepartureReminder,
+      createdAt: pref.createdAt,
+    };
   });
 }

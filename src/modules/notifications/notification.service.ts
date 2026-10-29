@@ -30,6 +30,10 @@ export async function subscribe(params: {
   deviceId: string;
   notifyOnApproach?: boolean;
   notifyScheduled?: boolean;
+  userLat?: number;
+  userLng?: number;
+  walkingMinutes?: number;
+  enableDepartureReminder?: boolean;
 }): Promise<{ id: string }> {
   const id = randomUUID();
   const now = Date.now();
@@ -40,7 +44,7 @@ export async function subscribe(params: {
     p256dh: params.p256dh,
     auth: params.auth,
     stopId: params.stopId,
-    serviceId: params.serviceId ?? '',
+    serviceId: params.serviceId,
     deviceId: params.deviceId,
     notifyOnApproach: params.notifyOnApproach ?? true,
     notifyScheduled: params.notifyScheduled ?? false,
@@ -49,6 +53,11 @@ export async function subscribe(params: {
     lastNotifiedMinute: null,
     lastNotifiedPrefix: null,
     lastNotifiedPrediction: null,
+    lastNotifiedState: null,
+    userLat: params.userLat ?? null,
+    userLng: params.userLng ?? null,
+    walkingMinutes: params.walkingMinutes ?? null,
+    enableDepartureReminder: params.enableDepartureReminder ?? true,
   });
 
   return { id };

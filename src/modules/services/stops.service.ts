@@ -24,3 +24,17 @@ export async function getStopsService(serviceId: string): Promise<Stop[]> {
     path: endpoints.stopsService(serviceId),
   });
 }
+
+export async function getStop(stopId: string): Promise<Stop | null> {
+  try {
+    const stops = await request<Stop[]>({
+      path: `/stops/${stopId}`,
+    });
+    if (Array.isArray(stops)) {
+      return stops[0] ?? null;
+    }
+    return stops as unknown as Stop;
+  } catch (e) {
+    return null;
+  }
+}

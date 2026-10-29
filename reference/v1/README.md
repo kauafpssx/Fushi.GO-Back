@@ -30,3 +30,4 @@ Backend 100% completo. 21 endpoints, 23 testes, 54 arquivos src.
 | `21-vapid-key.md` | GET /v1/vapid-public-key |
 | `22-health.md` | GET /health |
 | `23-notifications-device.md` | GET /v1/notifications (listar próprias) |
+| `24-notifications-status.md` | GET /v1/notifications/:id/status |

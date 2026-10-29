@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   currentMinute: 4,
-  lastNotifiedMinute: null as number | null,
+  lastNotifiedState: null as string | null,
+  lastNotifiedPrefix: null as string | null,
   sendPushNotification: vi.fn(async () => true),
   removeSubscription: vi.fn(async () => undefined),
-  updateLastNotifiedMinute: vi.fn(async (_id: string, _timestamp: number, minute: number) => {
-    mocks.lastNotifiedMinute = minute;
+  updateNotificationState: vi.fn(async (_id: string, _timestamp: number, state: string, prefix?: string | null, _prediction?: number | null, _minute?: number | null) => {
+    mocks.lastNotifiedState = state;
+    if (prefix) mocks.lastNotifiedPrefix = prefix;
   }),
   getPredictionService: vi.fn(async () => ({
     routeCode: '165',
@@ -26,8 +28,12 @@ const mocks = vi.hoisted(() => ({
     notifyScheduled: false,
     createdAt: 0,
     lastNotified: 0,
-    lastNotifiedMinute: mocks.lastNotifiedMinute,
+    lastNotifiedState: mocks.lastNotifiedState,
+    lastNotifiedPrefix: mocks.lastNotifiedPrefix,
+    lastNotifiedPrediction: null,
+    lastNotifiedMinute: null,
   }]),
+  getStop: vi.fn(async () => ({ id: 'stop-1', name: 'Test', lat: -23.5, lng: -46.6 })),
 }));
 
 vi.mock('../modules/predictions/predictions.service', () => ({
@@ -37,11 +43,16 @@ vi.mock('../modules/predictions/predictions.service', () => ({
 vi.mock('../modules/notifications/notification.store', () => ({
   getAllPreferences: mocks.getAllPreferences,
   removeSubscription: mocks.removeSubscription,
-  updateLastNotifiedMinute: mocks.updateLastNotifiedMinute,
+  updateNotificationState: mocks.updateNotificationState,
+  updateLastNotifiedMinute: vi.fn(async () => undefined),
 }));
 
 vi.mock('../modules/notifications/notification.service', () => ({
   sendPushNotification: mocks.sendPushNotification,
+}));
+
+vi.mock('../modules/services/stops.service', () => ({
+  getStop: mocks.getStop,
 }));
 
 import { runNotificationWorker } from '../modules/notifications/notification.worker';
@@ -52,32 +63,25 @@ describe('notification worker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.currentMinute = 4;
-    mocks.lastNotifiedMinute = null;
+    mocks.lastNotifiedState = null;
+    mocks.lastNotifiedPrefix = null;
   });
 
-  it('notifies once per minute value and sends again when the minute changes', async () => {
+  it('notifies once per state and sends again when state changes', async () => {
     await runNotificationWorker(logger);
     await runNotificationWorker(logger);
 
     expect(mocks.sendPushNotification).toHaveBeenCalledTimes(1);
-    expect(mocks.updateLastNotifiedMinute).toHaveBeenLastCalledWith(
-      'subscription-1',
-      expect.any(Number),
-      4,
-      expect.any(String),
-      expect.any(Number)
-    );
 
-    mocks.currentMinute = 3;
+    // Change to imminent state (< 1 min)
+    mocks.getPredictionService.mockResolvedValueOnce({
+      routeCode: '165',
+      serviceId: 'service-1',
+      stopId: 'stop-1',
+      vehicles: [{ prefix: '2491', prediction: 30, type: null }], // 0.5 min
+    } as any);
     await runNotificationWorker(logger);
 
     expect(mocks.sendPushNotification).toHaveBeenCalledTimes(2);
-    expect(mocks.updateLastNotifiedMinute).toHaveBeenLastCalledWith(
-      'subscription-1',
-      expect.any(Number),
-      3,
-      expect.any(String),
-      expect.any(Number)
-    );
   });
 });

@@ -14,13 +14,15 @@ export interface NotificationSubscription {
   };
 }
 
+export type NotificationState = 'normal' | 'approaching' | 'imminent' | 'arrived' | 'departureReminder';
+
 export interface NotificationPreference {
   id: string;
   endpoint: string;
   p256dh: string;
   auth: string;
   stopId: string;
-  serviceId: string;
+  serviceId?: string;
   deviceId: string;
   notifyOnApproach: boolean;
   notifyScheduled: boolean;
@@ -29,6 +31,11 @@ export interface NotificationPreference {
   lastNotifiedMinute: number | null;
   lastNotifiedPrefix: string | null;
   lastNotifiedPrediction: number | null;
+  lastNotifiedState: NotificationState | null;
+  userLat?: number | null;
+  userLng?: number | null;
+  walkingMinutes?: number | null;
+  enableDepartureReminder?: boolean;
 }
 
 const PREFIX_SUB = 'notif:sub:';
@@ -57,6 +64,11 @@ export async function savePreference(pref: NotificationPreference): Promise<void
     lastNotifiedMinute: pref.lastNotifiedMinute == null ? '' : String(pref.lastNotifiedMinute),
     lastNotifiedPrefix: pref.lastNotifiedPrefix ?? '',
     lastNotifiedPrediction: String(pref.lastNotifiedPrediction ?? 0),
+    lastNotifiedState: pref.lastNotifiedState ?? '',
+    userLat: pref.userLat == null ? '' : String(pref.userLat),
+    userLng: pref.userLng == null ? '' : String(pref.userLng),
+    walkingMinutes: pref.walkingMinutes == null ? '' : String(pref.walkingMinutes),
+    enableDepartureReminder: pref.enableDepartureReminder ? 'true' : 'false',
   });
 
   await redis.sadd(stopKey, pref.id);
@@ -92,6 +104,11 @@ export async function getPreference(id: string): Promise<NotificationPreference 
     lastNotifiedPrediction: sub.lastNotifiedPrediction === '' || sub.lastNotifiedPrediction == null
       ? null
       : Number(sub.lastNotifiedPrediction),
+    lastNotifiedState: (sub.lastNotifiedState === '' || !sub.lastNotifiedState) ? null : (sub.lastNotifiedState as NotificationState),
+    userLat: sub.userLat === '' || sub.userLat == null ? null : Number(sub.userLat),
+    userLng: sub.userLng === '' || sub.userLng == null ? null : Number(sub.userLng),
+    walkingMinutes: sub.walkingMinutes === '' || sub.walkingMinutes == null ? null : Number(sub.walkingMinutes),
+    enableDepartureReminder: sub.enableDepartureReminder === 'true',
   };
 }
 
@@ -144,17 +161,18 @@ export async function updateLastNotified(id: string, timestamp: number): Promise
   await redis.expire(hashKey, TTL_SECONDS);
 }
 
-export async function updateLastNotifiedMinute(
-  id: string, 
-  timestamp: number, 
-  minute: number,
+export async function updateNotificationState(
+  id: string,
+  timestamp: number,
+  state: NotificationState | null,
   prefix: string | null = null,
-  prediction: number | null = null
+  prediction: number | null = null,
+  minute: number | null = null
 ): Promise<void> {
   const hashKey = `${PREFIX_SUB}${id}`;
   const updates: Record<string, string> = {
     lastNotified: String(timestamp),
-    lastNotifiedMinute: String(minute),
+    lastNotifiedState: state ?? '',
   };
   
   if (prefix !== null) {
@@ -162,6 +180,9 @@ export async function updateLastNotifiedMinute(
   }
   if (prediction !== null) {
     updates.lastNotifiedPrediction = String(prediction);
+  }
+  if (minute !== null) {
+    updates.lastNotifiedMinute = String(minute);
   }
   
   await redis.hset(hashKey, updates);
