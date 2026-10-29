@@ -1,6 +1,6 @@
 import { getPredictionService } from '../predictions/predictions.service';
 import type { StopPredictionService } from '../predictions/predictions.types';
-import { getAllPreferences, updateNotificationState, updateNotificationTracking, type NotificationPreference } from './notification.store';
+import { getAllPreferences, updateNotificationState, updateNotificationTracking, removeSubscription, type NotificationPreference } from './notification.store';
 import { sendPushNotification } from './notification.service';
 import { getStop } from '../services/stops.service';
 import type { Stop } from '../services/stops.service';
@@ -214,6 +214,12 @@ async function processGroup(preferences: NotificationPreference[], sentThisTick?
             lastSeen.lastPrediction,
             null
           );
+          // Remover inscrição após notificar chegada
+          try {
+            await removeSubscription(preference.id);
+          } catch (e) {
+            // ignore
+          }
         }
       }
       await deleteLastSeen(groupKey);
@@ -450,6 +456,14 @@ async function processGroup(preferences: NotificationPreference[], sentThisTick?
         etaSeconds,
         minuteDisplay
       );
+      // Se chegou, remover inscrição
+      if ((state as string) === 'arrived') {
+        try {
+          await removeSubscription(preference.id);
+        } catch (e) {
+          // ignore
+        }
+      }
     }
   }
 
