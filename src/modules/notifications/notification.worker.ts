@@ -273,17 +273,68 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
       walkingMinutes = preference.walkingMinutes;
     }
 
-    const state = determineState(etaSeconds, preference, stop, walkingMinutes);
+    const etaMinutesCalc = etaSeconds / 60;
+    // Calcular estado direto por segundos para garantir todos os estados
+    let state: NotificationState;
+    if (preference.enableDepartureReminder !== false && walkingMinutes && walkingMinutes > 0) {
+      if (etaMinutesCalc <= walkingMinutes + SAFETY_MARGIN_MINUTES && etaMinutesCalc >= Math.max(0.5, walkingMinutes - 1)) {
+        state = 'departureReminder';
+      } else if (etaSeconds < 60) {
+        state = 'imminent';
+      } else if (etaSeconds <= 300) {
+        state = 'approaching';
+      } else {
+        state = 'normal';
+      }
+    } else if (etaSeconds < 60) {
+      state = 'imminent';
+    } else if (etaSeconds <= 300) {
+      state = 'approaching';
+    } else {
+      state = 'normal';
+    }
     const minuteDisplay = Math.floor(etaSeconds / 60);
 
-      // Aplicar prioridade - se já tem estado notificado com maior prioridade, não sobrepor indevidamente
-      if (preference.lastNotifiedState && preference.lastNotifiedPrefix === vehicle.prefix) {
-        const lastPriority = getStatePriority(preference.lastNotifiedState);
-        const currentPriority = getStatePriority(state);
-        
-        // Não notificar se já tem estado com maior ou igual prioridade e não mudou
-        if (lastPriority <= currentPriority && state !== 'departureReminder') {
-          // Atualizar tracking mesmo sem enviar notificação
+    // Deduplicação rígida: mesmo estado, mesmo ônibus, mesmo minuto -> não reenviar
+    if (
+      preference.lastNotifiedState === state &&
+      preference.lastNotifiedPrefix === vehicle.prefix &&
+      preference.lastNotifiedMinute !== null &&
+      preference.lastNotifiedMinute === minuteDisplay
+    ) {
+      await updateNotificationTracking(
+        preference.id,
+        state,
+        vehicle.prefix,
+        etaSeconds,
+        minuteDisplay
+      );
+      currentNotifiedSet.push(preference.id);
+      continue;
+    }
+
+    // Aplicar prioridade - se já tem estado notificado com maior prioridade, não sobrepor indevidamente
+    if (preference.lastNotifiedState && preference.lastNotifiedPrefix === vehicle.prefix) {
+      const lastPriority = getStatePriority(preference.lastNotifiedState);
+      const currentPriority = getStatePriority(state);
+      
+      // Não notificar se já tem estado com maior ou igual prioridade e não mudou
+      if (lastPriority <= currentPriority && state !== 'departureReminder') {
+        // Atualizar tracking mesmo sem enviar notificação
+        await updateNotificationTracking(
+          preference.id,
+          state,
+          vehicle.prefix,
+          etaSeconds,
+          minuteDisplay
+        );
+        currentNotifiedSet.push(preference.id);
+        continue;
+      }
+      
+      // departureReminder tem cooldown
+      if (state === 'departureReminder' && preference.lastNotifiedState === 'departureReminder') {
+        if (preference.lastNotified && Date.now() - preference.lastNotified < 5 * 60 * 1000) {
           await updateNotificationTracking(
             preference.id,
             state,
@@ -294,31 +345,17 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
           currentNotifiedSet.push(preference.id);
           continue;
         }
-        
-        // departureReminder tem cooldown
-        if (state === 'departureReminder' && preference.lastNotifiedState === 'departureReminder') {
-          if (preference.lastNotified && Date.now() - preference.lastNotified < 5 * 60 * 1000) {
-            await updateNotificationTracking(
-              preference.id,
-              state,
-              vehicle.prefix,
-              etaSeconds,
-              minuteDisplay
-            );
-            currentNotifiedSet.push(preference.id);
-            continue;
-          }
-        }
-      } else {
-        // Atualizar tracking sempre que processamos
-        await updateNotificationTracking(
-          preference.id,
-          state,
-          vehicle.prefix,
-          etaSeconds,
-          minuteDisplay
-        );
       }
+    } else {
+      // Atualizar tracking sempre que processamos
+      await updateNotificationTracking(
+        preference.id,
+        state,
+        vehicle.prefix,
+        etaSeconds,
+        minuteDisplay
+      );
+    }
 
     const notification = buildNotification(
       state,
