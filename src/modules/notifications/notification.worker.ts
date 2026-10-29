@@ -313,6 +313,23 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
       continue;
     }
 
+    // Se já foi notificado neste mesmo minuto com qualquer estado -> bloquear
+    if (
+      preference.lastNotifiedMinute !== null &&
+      preference.lastNotifiedMinute === minuteDisplay &&
+      preference.lastNotifiedPrefix === vehicle.prefix
+    ) {
+      await updateNotificationTracking(
+        preference.id,
+        state,
+        vehicle.prefix,
+        etaSeconds,
+        minuteDisplay
+      );
+      currentNotifiedSet.push(preference.id);
+      continue;
+    }
+
     // Aplicar prioridade - se já tem estado notificado com maior prioridade, não sobrepor indevidamente
     if (preference.lastNotifiedState && preference.lastNotifiedPrefix === vehicle.prefix) {
       const lastPriority = getStatePriority(preference.lastNotifiedState);
