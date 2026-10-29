@@ -30,8 +30,9 @@ const mocks = vi.hoisted(() => {
     return before - sets[key]!.length;
   });
   const expireMock = vi.fn(async () => true);
+  const scanMock = vi.fn(async () => [0, []] as [number, string[]]);
 
-  return { hashes, sets, hsetMock, hgetallMock, delMock, saddMock, smembersMock, sremMock, expireMock };
+  return { hashes, sets, hsetMock, hgetallMock, delMock, saddMock, smembersMock, sremMock, expireMock, scanMock };
 });
 
 vi.mock('../app/env', () => ({
@@ -50,6 +51,7 @@ vi.mock('@upstash/redis', () => ({
     smembers = mocks.smembersMock;
     srem = mocks.sremMock;
     expire = mocks.expireMock;
+    scan = mocks.scanMock;
   },
 }));
 
@@ -76,6 +78,7 @@ const basePref: NotificationPreference = {
   notifyScheduled: false,
   createdAt: Date.now(),
   lastNotified: 0,
+  lastNotifiedMinute: null,
 };
 
 beforeEach(() => {

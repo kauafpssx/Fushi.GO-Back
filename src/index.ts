@@ -1,13 +1,16 @@
 import 'dotenv/config';
 import { buildServer } from './app/server';
 import { env } from './app/env';
+import { startNotificationWorker } from './modules/notifications/notification.worker';
 
 const server = await buildServer();
 
 await server.listen({ port: env.port, host: env.host });
+const stopNotificationWorker = startNotificationWorker(server.log);
 
 const shutdown = async (signal: string) => {
   server.log.info(`${signal} received, shutting down...`);
+  stopNotificationWorker();
   await server.close();
   process.exit(0);
 };

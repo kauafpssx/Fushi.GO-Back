@@ -46,6 +46,7 @@ export async function subscribe(params: {
     notifyScheduled: params.notifyScheduled ?? false,
     createdAt: now,
     lastNotified: 0,
+    lastNotifiedMinute: null,
   });
 
   return { id };

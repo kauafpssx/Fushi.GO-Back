@@ -26,11 +26,13 @@ export interface NotificationPreference {
   notifyScheduled: boolean;
   createdAt: number;
   lastNotified: number;
+  lastNotifiedMinute: number | null;
 }
 
 const PREFIX_SUB = 'notif:sub:';
 const PREFIX_STOP = 'notif:stop:';
 const PREFIX_DEVICE = 'notif:device:';
+const ALL_SUBSCRIPTIONS_KEY = 'notif:all';
 const TTL_SECONDS = 2592000; // 30 dias em segundos
 
 export async function savePreference(pref: NotificationPreference): Promise<void> {
@@ -50,10 +52,12 @@ export async function savePreference(pref: NotificationPreference): Promise<void
     notifyScheduled: String(pref.notifyScheduled),
     createdAt: String(pref.createdAt),
     lastNotified: String(pref.lastNotified),
+    lastNotifiedMinute: pref.lastNotifiedMinute == null ? '' : String(pref.lastNotifiedMinute),
   });
 
   await redis.sadd(stopKey, pref.id);
   await redis.sadd(deviceKey, pref.id);
+  await redis.sadd(ALL_SUBSCRIPTIONS_KEY, pref.id);
 
   await redis.expire(hashKey, TTL_SECONDS);
   await redis.expire(stopKey, TTL_SECONDS);
@@ -77,6 +81,9 @@ export async function getPreference(id: string): Promise<NotificationPreference 
     notifyScheduled: sub.notifyScheduled === 'true',
     createdAt: Number(sub.createdAt),
     lastNotified: Number(sub.lastNotified),
+    lastNotifiedMinute: sub.lastNotifiedMinute === '' || sub.lastNotifiedMinute == null
+      ? null
+      : Number(sub.lastNotifiedMinute),
   };
 }
 
@@ -96,6 +103,7 @@ export async function deletePreference(id: string, deviceId: string): Promise<{ 
 
   await redis.srem(stopKey, id);
   await redis.srem(deviceKey, id);
+  await redis.srem(ALL_SUBSCRIPTIONS_KEY, id);
   await redis.del(hashKey);
 
   return { ok: true };
@@ -128,6 +136,43 @@ export async function updateLastNotified(id: string, timestamp: number): Promise
   await redis.expire(hashKey, TTL_SECONDS);
 }
 
+export async function updateLastNotifiedMinute(id: string, timestamp: number, minute: number): Promise<void> {
+  const hashKey = `${PREFIX_SUB}${id}`;
+  await redis.hset(hashKey, {
+    lastNotified: String(timestamp),
+    lastNotifiedMinute: String(minute),
+  });
+  await redis.expire(hashKey, TTL_SECONDS);
+}
+
+export async function getAllPreferences(): Promise<NotificationPreference[]> {
+  let ids = await redis.smembers(ALL_SUBSCRIPTIONS_KEY);
+
+  // Backfill subscriptions created before the global index existed.
+  if (!ids || ids.length === 0) {
+    let cursor = 0;
+    const legacyIds: string[] = [];
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, {
+        match: `${PREFIX_SUB}*`,
+        count: 100,
+      });
+      legacyIds.push(...keys.map((key) => key.slice(PREFIX_SUB.length)));
+      cursor = Number(nextCursor);
+    } while (cursor !== 0);
+
+    if (legacyIds.length > 0) {
+      await Promise.all(legacyIds.map((id) => redis.sadd(ALL_SUBSCRIPTIONS_KEY, id)));
+      ids = legacyIds;
+    }
+  }
+
+  if (!ids || ids.length === 0) return [];
+
+  const subs = await Promise.all(ids.map((id) => getPreference(id)));
+  return subs.filter(Boolean) as NotificationPreference[];
+}
+
 export async function removeSubscription(id: string): Promise<void> {
   const pref = await getPreference(id);
   if (!pref) return;
@@ -138,5 +183,6 @@ export async function removeSubscription(id: string): Promise<void> {
 
   await redis.srem(stopKey, id);
   await redis.srem(deviceKey, id);
+  await redis.srem(ALL_SUBSCRIPTIONS_KEY, id);
   await redis.del(hashKey);
 }
