@@ -16,8 +16,8 @@ const subscribeBodySchema = z.object({
   subscription: subscriptionSchema,
   stopId: z.string().uuid(),
   serviceId: z.string().uuid().optional(),
-  notifyOnApproach: z.boolean().optional(),
-  notifyScheduled: z.boolean().optional(),
+  notifyOnApproach: z.boolean().optional().default(true),
+  notifyScheduled: z.boolean().optional().default(false),
 });
 
 const stopIdParamsSchema = z.object({

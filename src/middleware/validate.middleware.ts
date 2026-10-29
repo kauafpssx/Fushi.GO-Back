@@ -4,11 +4,7 @@ import { type ZodSchema, ZodError } from 'zod';
 export function validate(schema: ZodSchema) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     try {
-      (request as any).validated = schema.parse({
-        body: request.body,
-        query: request.query,
-        params: request.params,
-      });
+      (request as any).validated = schema.parse(request.body);
     } catch (err) {
       if (err instanceof ZodError) {
         reply.code(400).send({
