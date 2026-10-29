@@ -302,6 +302,7 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
       preference.lastNotifiedMinute !== null &&
       preference.lastNotifiedMinute === minuteDisplay
     ) {
+      console.log(`[NOTIFY-SKIP] same state+prefix+minute | sub=${preference.id} | prefix=${vehicle.prefix} | min=${minuteDisplay} | state=${state}`);
       await updateNotificationTracking(
         preference.id,
         state,
@@ -319,6 +320,26 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
       preference.lastNotifiedMinute === minuteDisplay &&
       preference.lastNotifiedPrefix === vehicle.prefix
     ) {
+      console.log(`[NOTIFY-SKIP] same minute+prefix different state | sub=${preference.id} | prefix=${vehicle.prefix} | min=${minuteDisplay} | oldState=${preference.lastNotifiedState} | newState=${state}`);
+      await updateNotificationTracking(
+        preference.id,
+        state,
+        vehicle.prefix,
+        etaSeconds,
+        minuteDisplay
+      );
+      currentNotifiedSet.push(preference.id);
+      continue;
+    }
+
+    // Se já tem lastNotifiedMinute igual e foi notificado há menos de 90s -> bloquear
+    if (
+      preference.lastNotifiedMinute !== null &&
+      preference.lastNotifiedMinute === minuteDisplay &&
+      preference.lastNotified &&
+      Date.now() - preference.lastNotified < 90000
+    ) {
+      console.log(`[NOTIFY-SKIP] recent notification same minute | sub=${preference.id} | min=${minuteDisplay}`);
       await updateNotificationTracking(
         preference.id,
         state,
@@ -399,6 +420,8 @@ async function processGroup(preferences: NotificationPreference[]): Promise<void
         },
       }
     );
+
+    console.log(`[NOTIFY-SEND] sub=${preference.id} | prefix=${vehicle.prefix} | route=${prediction.routeCode} | state=${state} | etaSec=${etaSeconds} | min=${minuteDisplay} | sent=${sent}`);
 
     if (sent) {
       currentNotifiedSet.push(preference.id);
